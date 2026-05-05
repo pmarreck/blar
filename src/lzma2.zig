@@ -1,8 +1,8 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const container = @import("container.zig");
-const ct = @import("container_types.zig");
-const csum_mod = @import("checksum.zig");
+const container = @import("blip").container_mod;
+const ct = @import("blip").container_types;
+const csum_mod = @import("blip").checksum_mod;
 const build_options = @import("build_options");
 const compression = if (build_options.enable_compression)
     @import("compression.zig")
@@ -82,7 +82,7 @@ pub fn verifyChecksum(buf: []const u8) ContainerError!bool {
 test "LZMA2 round-trip: compress and decompress a DATA container" {
     if (comptime !build_options.enable_compression) return;
     const allocator = testing.allocator;
-    const leaf = @import("leaf.zig");
+    const leaf = @import("blip").leaf_mod;
 
     const inner = try leaf.serializeData(allocator, "Hello, LZMA2!");
     defer allocator.free(inner);
@@ -99,7 +99,7 @@ test "LZMA2 round-trip: compress and decompress a DATA container" {
 test "LZMA2 hash/checksum verification" {
     if (comptime !build_options.enable_compression) return;
     const allocator = testing.allocator;
-    const leaf = @import("leaf.zig");
+    const leaf = @import("blip").leaf_mod;
 
     const inner = try leaf.serializeData(allocator, "integrity test");
     defer allocator.free(inner);
@@ -113,7 +113,7 @@ test "LZMA2 hash/checksum verification" {
 test "LZMA2 checksum detects corruption" {
     if (comptime !build_options.enable_compression) return;
     const allocator = testing.allocator;
-    const leaf = @import("leaf.zig");
+    const leaf = @import("blip").leaf_mod;
 
     const inner = try leaf.serializeData(allocator, "corrupt me");
     defer allocator.free(inner);
@@ -130,8 +130,8 @@ test "LZMA2 checksum detects corruption" {
 test "LZMA2 wraps an ARRAY container" {
     if (comptime !build_options.enable_compression) return;
     const allocator = testing.allocator;
-    const leaf = @import("leaf.zig");
-    const array_mod = @import("array.zig");
+    const leaf = @import("blip").leaf_mod;
+    const array_mod = @import("blip").array_mod;
 
     const elem1 = try leaf.serializeUtf8(allocator, "first");
     defer allocator.free(elem1);
@@ -153,7 +153,7 @@ test "LZMA2 wraps an ARRAY container" {
 test "LZMA2 Reader: header inspection without decompression" {
     if (comptime !build_options.enable_compression) return;
     const allocator = testing.allocator;
-    const leaf = @import("leaf.zig");
+    const leaf = @import("blip").leaf_mod;
 
     const content = "Hello, world! This is some compressible text content.";
     const inner = try leaf.serializeData(allocator, content);
@@ -171,7 +171,7 @@ test "LZMA2 Reader: header inspection without decompression" {
 test "LZMA2 compression shrinks compressible data" {
     if (comptime !build_options.enable_compression) return;
     const allocator = testing.allocator;
-    const leaf = @import("leaf.zig");
+    const leaf = @import("blip").leaf_mod;
 
     // Create a highly compressible payload (repeated text)
     var big_content: [4096]u8 = undefined;
@@ -198,7 +198,7 @@ test "LZMA2 compression shrinks compressible data" {
 test "LZMA2 empty container round-trip" {
     if (comptime !build_options.enable_compression) return;
     const allocator = testing.allocator;
-    const leaf = @import("leaf.zig");
+    const leaf = @import("blip").leaf_mod;
 
     const inner = try leaf.serializeData(allocator, "");
     defer allocator.free(inner);
@@ -214,7 +214,7 @@ test "LZMA2 empty container round-trip" {
 test "LZMA2 rejects non-compressed container (no COMP attribute)" {
     if (comptime !build_options.enable_compression) return;
     const allocator = testing.allocator;
-    const leaf = @import("leaf.zig");
+    const leaf = @import("blip").leaf_mod;
 
     const raw = try leaf.serializeData(allocator, "not compressed");
     defer allocator.free(raw);
@@ -225,7 +225,7 @@ test "LZMA2 rejects non-compressed container (no COMP attribute)" {
 test "isCompressed returns true for LZMA2 container" {
     if (comptime !build_options.enable_compression) return;
     const allocator = testing.allocator;
-    const leaf = @import("leaf.zig");
+    const leaf = @import("blip").leaf_mod;
 
     const inner = try leaf.serializeData(allocator, "test");
     defer allocator.free(inner);
@@ -238,7 +238,7 @@ test "isCompressed returns true for LZMA2 container" {
 
 test "isCompressed returns false for plain container" {
     const allocator = testing.allocator;
-    const leaf = @import("leaf.zig");
+    const leaf = @import("blip").leaf_mod;
 
     const plain = try leaf.serializeData(allocator, "test");
     defer allocator.free(plain);
@@ -249,7 +249,7 @@ test "isCompressed returns false for plain container" {
 test "Verify LP attributes are correct (TYPE=data, COMP=lzma2, DECOMP_LEN present, CSUM=blake3_128)" {
     if (comptime !build_options.enable_compression) return;
     const allocator = testing.allocator;
-    const leaf = @import("leaf.zig");
+    const leaf = @import("blip").leaf_mod;
 
     const inner = try leaf.serializeData(allocator, "attribute check");
     defer allocator.free(inner);

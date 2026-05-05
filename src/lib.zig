@@ -6,36 +6,6 @@ const pb = @import("printable_binary");
 
 // Re-export blip module for internal use
 pub const core = blip;
-
-/// Encode a u64 value into BLIP format.
-/// Returns number of bytes written, or -1 on error.
-export fn blip_encode(value: u64, out_buf: [*]u8, out_cap: usize) callconv(.c) i32 {
-    const buf = out_buf[0..out_cap];
-    const n = blip.encode(value, buf) catch return -1;
-    return @intCast(n);
-}
-
-/// Decode a BLIP value from encoded bytes.
-/// Returns bytes consumed, or -1 on error. Decoded value stored in out_value.
-export fn blip_decode(encoded: [*]const u8, encoded_len: usize, out_value: *u64) callconv(.c) i32 {
-    const buf = encoded[0..encoded_len];
-    const result = blip.decode(buf) catch return -1;
-    out_value.* = result.value;
-    return @intCast(result.bytes_read);
-}
-
-/// Check if encoded bytes represent a sentinel.
-export fn blip_is_sentinel(encoded: [*]const u8, encoded_len: usize) callconv(.c) bool {
-    return blip.isSentinel(encoded[0..encoded_len]);
-}
-
-/// Get the encoded size for a value without actually encoding.
-export fn blip_encoded_size(value: u64) callconv(.c) i32 {
-    var buf: [16]u8 = undefined;
-    const n = blip.encode(value, &buf) catch return -1;
-    return @intCast(n);
-}
-
 // ---------------------------------------------------------------------------
 // Container / archive C FFI exports
 // ---------------------------------------------------------------------------
@@ -43,13 +13,57 @@ export fn blip_encoded_size(value: u64) callconv(.c) i32 {
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const page_allocator = std.heap.page_allocator;
-const mini_blar = blip.mini_blar_mod;
-const ContainerError = mini_blar.ContainerError;
-const leaf = mini_blar.leaf;
-const dict_mod = mini_blar.dict_mod;
+const archive = @import("archive.zig");
+
+// BLIP-side error_string from the BLIP dep (libblip.a). Used as fall-through
+// for blar_error_string when the code is not blar-specific.
+extern fn blip_error_string(error_code: i32) [*:0]const u8;
+
+// Other libblip.a C entry points that blar's wrappers call. Signatures match
+// BLIP's blip.h. Linked from libblip.a.
+extern fn blip_free(ptr: [*]u8, len: usize) callconv(.c) void;
+extern fn blip_peek(
+    buf: [*]const u8, buf_len: usize,
+    path: [*]const u8, path_len: usize,
+    out_type: *u8,
+    out_data: *[*]const u8, out_data_len: *usize,
+) callconv(.c) i32;
+extern fn blip_container_count(buf: [*]const u8, len: usize, out_count: *u64) callconv(.c) i32;
+extern fn blip_container_hash(buf: [*]const u8, len: usize, out_hash: *[8]u8) callconv(.c) i32;
+extern fn blip_container_key_at(
+    buf: [*]const u8, len: usize, index: u64,
+    out_key: *[*]const u8, out_key_len: *usize,
+) callconv(.c) i32;
+extern fn blip_peek_display(
+    buf: [*]const u8, buf_len: usize,
+    path: [*]const u8, path_len: usize,
+    flags: u32,
+    out_stdout: *[*]const u8, out_stdout_len: *usize,
+    out_stderr: *[*]const u8, out_stderr_len: *usize,
+) callconv(.c) i32;
+extern fn blip_encode_printable_binary(
+    input: [*]const u8, input_len: usize,
+    out_buf: *[*]u8, out_len: *usize,
+) callconv(.c) i32;
+
+/// Get a human-readable error string for an error code.
+/// blar-specific codes are handled here; BLIP-side codes fall through to libblip.a.
+export fn blar_error_string(error_code: i32) callconv(.c) [*:0]const u8 {
+    return switch (error_code) {
+        // Archive-specific error codes (ZIP, PDF, JXL, codec expansion).
+        -33 => "invalid zip container",
+        -34 => "encrypted zip container",
+        -35 => "zip64 not supported",
+        -36 => "unsupported zip compression method",
+        else => blip_error_string(error_code),
+    };
+}
+const ContainerError = archive.ContainerError;
+const leaf = archive.leaf;
+const dict_mod = archive.dict_mod;
 
 /// Map a full archive error (ContainerError | OutOfMemory | CompressionError) to a C FFI error code.
-fn fullArchiveErrorCode(err: (Allocator.Error || ContainerError || mini_blar.compression_mod.CompressionError)) i32 {
+fn fullArchiveErrorCode(err: (Allocator.Error || ContainerError || archive.compression_mod.CompressionError)) i32 {
     return switch (err) {
         error.OutOfMemory => -13,
         error.InvalidContainerType => -1,
@@ -93,51 +107,6 @@ fn containerErrorCode(err: ContainerError) i32 {
         error.MissingDecompLen => -27,
     };
 }
-
-/// Get a human-readable error string for an error code.
-export fn blip_error_string(error_code: i32) callconv(.c) [*:0]const u8 {
-    return switch (error_code) {
-        0 => "success",
-        -1 => "invalid container type",
-        -2 => "invalid length",
-        -3 => "length exceeds bounds",
-        -4 => "missing required key",
-        -5 => "duplicate key",
-        -6 => "keys not sorted",
-        -7 => "hash mismatch",
-        -8 => "index out of bounds",
-        -9 => "invalid magic",
-        -10 => "buffer too small",
-        -11 => "unexpected end of input",
-        -12 => "overflow",
-        -13 => "allocation failure",
-        -14 => "not found",
-        -15 => "invalid path",
-        -16 => "immutable target (magic bytes)",
-        -17 => "not a leaf (cannot poke containers)",
-        -18 => "invalid JSON",
-        -19 => "missing required field",
-        -20 => "invalid entry type",
-        -21 => "invalid timestamp",
-        -22 => "invalid mode",
-        -23 => "decompression failed",
-        -24 => "compression failed",
-        -25 => "missing attribute sigil",
-        -26 => "invalid attribute sigil order",
-        -27 => "missing decompressed length",
-        -28 => "authentication failed (wrong password or corrupted data)",
-        -29 => "password required for encrypted container",
-        -30 => "encryption failed",
-        -31 => "decryption failed",
-        -32 => "unsupported compression algorithm",
-        -33 => "invalid zip container",
-        -34 => "encrypted zip container",
-        -35 => "zip64 not supported",
-        -36 => "unsupported zip compression method",
-        else => "unknown error",
-    };
-}
-
 /// Archive creation flags (must match BLAR_* in blar.h).
 const BLIP_ARCHIVE_ABSOLUTE_PATHS: u32 = 0x0001;
 
@@ -158,19 +127,6 @@ pub fn normalizePath(path: []const u8) []const u8 {
     }
     return p;
 }
-
-export fn blip_normalize_path(
-    path: [*]const u8,
-    path_len: usize,
-    out_path: *[*]const u8,
-    out_path_len: *usize,
-) callconv(.c) void {
-    const input = path[0..path_len];
-    const result = normalizePath(input);
-    out_path.* = result.ptr;
-    out_path_len.* = result.len;
-}
-
 /// A file entry passed from C for simple archive creation.
 const CFileEntry = extern struct {
     path: [*]const u8,
@@ -234,7 +190,7 @@ export fn blar_create(
 ) callconv(.c) i32 {
     const normalize = (flags & BLIP_ARCHIVE_ABSOLUTE_PATHS) == 0;
 
-    const file_entries = page_allocator.alloc(mini_blar.FileEntry, file_count) catch return -13;
+    const file_entries = page_allocator.alloc(archive.FileEntry, file_count) catch return -13;
     defer page_allocator.free(file_entries);
 
     for (0..file_count) |i| {
@@ -246,7 +202,7 @@ export fn blar_create(
         };
     }
 
-    const result = mini_blar.createArchive(page_allocator, file_entries) catch return -1;
+    const result = archive.createArchive(page_allocator, file_entries) catch return -1;
     out_buf.* = result.ptr;
     out_len.* = result.len;
     return 0;
@@ -259,15 +215,15 @@ export fn blar_create_full(
     flags: u32,
     per_file_comp_algo: u8,
     num_threads: u8,
-    progress_fn: mini_blar.ProgressFn,
-    phase_fn: mini_blar.PhaseFn,
+    progress_fn: archive.ProgressFn,
+    phase_fn: archive.PhaseFn,
     progress_ctx: ?*anyopaque,
     out_buf: *[*]u8,
     out_len: *usize,
 ) callconv(.c) i32 {
     const normalize = (flags & BLIP_ARCHIVE_ABSOLUTE_PATHS) == 0;
 
-    var archive_entries = page_allocator.alloc(mini_blar.ArchiveEntry, entry_count) catch return -13;
+    var archive_entries = page_allocator.alloc(archive.ArchiveEntry, entry_count) catch return -13;
     defer page_allocator.free(archive_entries);
 
     // Pre-allocate a flat buffer for all xattr slices across all entries
@@ -275,10 +231,10 @@ export fn blar_create_full(
     for (0..entry_count) |i| {
         total_xattrs += entries[i].xattr_count;
     }
-    var xattr_buf: []mini_blar.XattrEntry = if (total_xattrs > 0)
-        page_allocator.alloc(mini_blar.XattrEntry, total_xattrs) catch return -13
+    var xattr_buf: []archive.XattrEntry = if (total_xattrs > 0)
+        page_allocator.alloc(archive.XattrEntry, total_xattrs) catch return -13
     else
-        &[_]mini_blar.XattrEntry{};
+        &[_]archive.XattrEntry{};
     defer if (total_xattrs > 0) page_allocator.free(xattr_buf);
 
     var xattr_offset: usize = 0;
@@ -292,9 +248,9 @@ export fn blar_create_full(
         const gname: []const u8 = if (e.groupname) |g| g[0..e.groupname_len] else &.{};
 
         // Convert C xattr array to Zig slice
-        const xattr_slice: []const mini_blar.XattrEntry = if (e.xattrs) |xa_ptr| blk: {
+        const xattr_slice: []const archive.XattrEntry = if (e.xattrs) |xa_ptr| blk: {
             const count = e.xattr_count;
-            if (count == 0) break :blk &[_]mini_blar.XattrEntry{};
+            if (count == 0) break :blk &[_]archive.XattrEntry{};
             for (0..count) |j| {
                 const cxa = xa_ptr[j];
                 const name_ptr = cxa.name;
@@ -307,7 +263,7 @@ export fn blar_create_full(
             const slice = xattr_buf[xattr_offset .. xattr_offset + count];
             xattr_offset += count;
             break :blk slice;
-        } else &[_]mini_blar.XattrEntry{};
+        } else &[_]archive.XattrEntry{};
 
         const rfork: []const u8 = if (e.resource_fork) |rf| rf[0..e.resource_fork_len] else &.{};
 
@@ -360,10 +316,10 @@ export fn blar_create_full(
     }
 
     // Convert per_file_comp_algo: 0=none, 1=lzma2, 2=bzip2, 3=lz4, 4=zstd
-    const CompressionId_ = mini_blar.container_mod.CompressionId;
+    const CompressionId_ = archive.container_mod.CompressionId;
     const comp_id: ?CompressionId_ = if (per_file_comp_algo == 0) null else std.meta.intToEnum(CompressionId_, @as(u7, @truncate(per_file_comp_algo))) catch return -32;
 
-    const result = mini_blar.createFullArchive(page_allocator, archive_entries, progress_fn, phase_fn, progress_ctx, comp_id, num_threads) catch |e| {
+    const result = archive.createFullArchive(page_allocator, archive_entries, progress_fn, phase_fn, progress_ctx, comp_id, num_threads) catch |e| {
         return fullArchiveErrorCode(e);
     };
     out_buf.* = result.ptr;
@@ -377,7 +333,7 @@ export fn blar_file_count(
     buf_len: usize,
     out_count: *u64,
 ) callconv(.c) i32 {
-    const reader = mini_blar.ArchiveReader.init(buf[0..buf_len]) catch return -1;
+    const reader = archive.ArchiveReader.init(buf[0..buf_len]) catch return -1;
     out_count.* = reader.entryCount() catch return -1;
     return 0;
 }
@@ -387,7 +343,7 @@ export fn blar_verify(
     buf: [*]const u8,
     buf_len: usize,
 ) callconv(.c) bool {
-    const reader = mini_blar.ArchiveReader.init(buf[0..buf_len]) catch return false;
+    const reader = archive.ArchiveReader.init(buf[0..buf_len]) catch return false;
     return reader.verifyChecksum() catch false;
 }
 
@@ -400,7 +356,7 @@ export fn blar_file_path(
     out_path: *[*]const u8,
     out_path_len: *usize,
 ) callconv(.c) i32 {
-    const reader = mini_blar.ArchiveReader.init(buf[0..buf_len]) catch |e| return containerErrorCode(e);
+    const reader = archive.ArchiveReader.init(buf[0..buf_len]) catch |e| return containerErrorCode(e);
     const path_val = reader.entryPathAt(index) catch |e| return containerErrorCode(e);
     out_path.* = path_val.ptr;
     out_path_len.* = path_val.len;
@@ -408,7 +364,7 @@ export fn blar_file_path(
 }
 
 /// Get file content at the given index, handling per-file compression transparently.
-/// Caller must free the returned buffer with blip_free_content().
+/// Caller must free the returned buffer with blar_free_content().
 export fn blar_file_content(
     buf: [*]const u8,
     buf_len: usize,
@@ -416,7 +372,7 @@ export fn blar_file_content(
     out_data: *[*]u8,
     out_data_len: *usize,
 ) callconv(.c) i32 {
-    const reader = mini_blar.ArchiveReader.init(buf[0..buf_len]) catch |e| return containerErrorCode(e);
+    const reader = archive.ArchiveReader.init(buf[0..buf_len]) catch |e| return containerErrorCode(e);
     const content = reader.fileContentDecompress(index, page_allocator) catch |e| {
         // Map all possible errors
         return switch (e) {
@@ -431,16 +387,8 @@ export fn blar_file_content(
     out_data_len.* = content.len;
     return 0;
 }
-
-/// Free content returned by blar_file_content.
-export fn blip_free_content(ptr: [*]u8, len: usize) callconv(.c) void {
-    if (len > 0) {
-        page_allocator.free(ptr[0..len]);
-    }
-}
-
 /// Get file content by path, handling per-file compression transparently.
-/// Caller must free the returned buffer with blip_free_content().
+/// Caller must free the returned buffer with blar_free_content().
 export fn blar_file_content_by_path(
     buf: [*]const u8,
     buf_len: usize,
@@ -449,7 +397,7 @@ export fn blar_file_content_by_path(
     out_data: *[*]u8,
     out_data_len: *usize,
 ) callconv(.c) i32 {
-    const reader = mini_blar.ArchiveReader.init(buf[0..buf_len]) catch |e| return containerErrorCode(e);
+    const reader = archive.ArchiveReader.init(buf[0..buf_len]) catch |e| return containerErrorCode(e);
     const idx = (reader.findFile(path[0..path_len]) catch |e| return containerErrorCode(e)) orelse return -14;
     const content = reader.fileContentDecompress(idx, page_allocator) catch |e| {
         return switch (e) {
@@ -473,7 +421,7 @@ export fn blar_file_verify(
     buf_len: usize,
     index: u64,
 ) callconv(.c) i32 {
-    const reader = mini_blar.ArchiveReader.init(buf[0..buf_len]) catch |e| return containerErrorCode(e);
+    const reader = archive.ArchiveReader.init(buf[0..buf_len]) catch |e| return containerErrorCode(e);
     const ok = reader.verifyFileAt(index) catch |e| return containerErrorCode(e);
     if (!ok) return -7;
     return 0;
@@ -486,7 +434,7 @@ export fn blar_verify_merkle(
     buf_len: usize,
     index: u64,
 ) callconv(.c) i32 {
-    const reader = mini_blar.ArchiveReader.init(buf[0..buf_len]) catch |e| return containerErrorCode(e);
+    const reader = archive.ArchiveReader.init(buf[0..buf_len]) catch |e| return containerErrorCode(e);
     const ok = reader.verifyMerkleAt(index, page_allocator) catch |e| {
         if (e == error.OutOfMemory) return -13;
         const ce: ContainerError = @errorCast(e);
@@ -504,7 +452,7 @@ export fn blar_entry_type(
     index: u64,
     out_type: *u8,
 ) callconv(.c) i32 {
-    const reader = mini_blar.ArchiveReader.init(buf[0..buf_len]) catch |e| return containerErrorCode(e);
+    const reader = archive.ArchiveReader.init(buf[0..buf_len]) catch |e| return containerErrorCode(e);
     const entry_type = reader.entryTypeAt(index) catch |e| return containerErrorCode(e);
     out_type.* = @intFromEnum(entry_type);
     return 0;
@@ -522,7 +470,7 @@ export fn blar_entry_metadata(
     out_owner_len: *usize,
 ) callconv(.c) i32 {
     const slice = buf[0..buf_len];
-    const reader = mini_blar.ArchiveReader.init(slice) catch |e| return containerErrorCode(e);
+    const reader = archive.ArchiveReader.init(slice) catch |e| return containerErrorCode(e);
 
     // Default to zero/null
     out_mode.* = 0;
@@ -602,7 +550,7 @@ export fn blar_entry_metadata_full(
     out_groupname_len: *usize,
 ) callconv(.c) i32 {
     const slice = buf[0..buf_len];
-    const reader = mini_blar.ArchiveReader.init(slice) catch |e| return containerErrorCode(e);
+    const reader = archive.ArchiveReader.init(slice) catch |e| return containerErrorCode(e);
 
     out_mode.* = 0;
     out_mtime_ns.* = 0;
@@ -693,7 +641,7 @@ export fn blar_entry_xattrs(
     out_resource_fork_len.* = 0;
 
     const slice = buf[0..buf_len];
-    const reader = mini_blar.ArchiveReader.init(slice) catch |e| return containerErrorCode(e);
+    const reader = archive.ArchiveReader.init(slice) catch |e| return containerErrorCode(e);
     const entry_type = reader.entryTypeAt(index) catch |e| return containerErrorCode(e);
 
     if (entry_type == .file) {
@@ -705,7 +653,7 @@ export fn blar_entry_xattrs(
 
 fn extractFileXattrs(
     slice: []const u8,
-    reader: mini_blar.ArchiveReader,
+    reader: archive.ArchiveReader,
     index: u64,
     out_xattrs: *?[*]CXattrEntry,
     out_count: *usize,
@@ -786,7 +734,7 @@ fn extractFileXattrs(
 
 fn extractDirXattrs(
     slice: []const u8,
-    reader: mini_blar.ArchiveReader,
+    reader: archive.ArchiveReader,
     index: u64,
     out_xattrs: *?[*]CXattrEntry,
     out_count: *usize,
@@ -849,281 +797,11 @@ export fn blar_free_xattrs(
         if (resource_fork_len > 0) page_allocator.free(rf[0..resource_fork_len]);
     }
 }
-
-/// Free a buffer allocated by blar_create or blar_create_full.
-export fn blip_free(ptr: [*]u8, len: usize) callconv(.c) void {
-    page_allocator.free(ptr[0..len]);
-}
-
-// ---------------------------------------------------------------------------
-// Peek / navigation C FFI exports
-// ---------------------------------------------------------------------------
-
-const peek_mod = blip.peek_mod;
-
-/// Navigate to a container within a BLIP buffer using a path expression.
-/// Path syntax: [N] for array index, [key] for dict key.
-/// Returns 0 on success. out_type receives the v2 container type ID (1-7).
-/// out_data/out_data_len receive a zero-copy pointer to the container bytes.
-export fn blip_peek(
-    buf: [*]const u8,
-    buf_len: usize,
-    path: [*]const u8,
-    path_len: usize,
-    out_type: *u8,
-    out_data: *[*]const u8,
-    out_data_len: *usize,
-) callconv(.c) i32 {
-    const container_mod = mini_blar.container_mod;
-    const slice = buf[0..buf_len];
-    const path_str = path[0..path_len];
-
-    // Parse the path
-    var parsed = peek_mod.parsePath(page_allocator, path_str) catch return -15;
-    defer peek_mod.freeParsedPath(page_allocator, &parsed);
-
-    // Navigate
-    const result = peek_mod.navigate(slice, parsed.segments) catch |e| return containerErrorCode(e);
-
-    // Parse the LP header to get the type ID
-    const lp_view = container_mod.parseLPHeader(result) catch |e| return containerErrorCode(e);
-    out_type.* = @intFromEnum(lp_view.type_id);
-    out_data.* = result.ptr;
-    out_data_len.* = result.len;
-    return 0;
-}
-
-/// Get element/pair count for an array-like or dict-like container.
-export fn blip_container_count(
-    buf: [*]const u8,
-    len: usize,
-    out_count: *u64,
-) callconv(.c) i32 {
-    out_count.* = peek_mod.containerCount(buf[0..len]) catch |e| return containerErrorCode(e);
-    return 0;
-}
-
-/// Get the trailing xxHash64 from a container.
-export fn blip_container_hash(
-    buf: [*]const u8,
-    len: usize,
-    out_hash: [*]u8,
-) callconv(.c) i32 {
-    const hash = peek_mod.containerHash(buf[0..len]) catch |e| return containerErrorCode(e);
-    @memcpy(out_hash[0..8], &hash);
-    return 0;
-}
-
-/// Get the key payload bytes at the given pair index from a dict-like container.
-export fn blip_container_key_at(
-    buf: [*]const u8,
-    len: usize,
-    index: u64,
-    out_key: *[*]const u8,
-    out_key_len: *usize,
-) callconv(.c) i32 {
-    const key_bytes = peek_mod.containerKeyAt(buf[0..len], index) catch |e| return containerErrorCode(e);
-    out_key.* = key_bytes.ptr;
-    out_key_len.* = key_bytes.len;
-    return 0;
-}
-
-/// Full peek display: navigate + format output in Zig core.
-/// Returns 0 on success, negative error code on failure.
-/// Caller must free stdout/stderr buffers with blip_free().
-export fn blip_peek_display(
-    buf_ptr: [*]const u8,
-    buf_len: usize,
-    path_ptr: [*]const u8,
-    path_len: usize,
-    flags: u32,
-    out_stdout_ptr: *[*]const u8,
-    out_stdout_len: *usize,
-    out_stderr_ptr: *[*]const u8,
-    out_stderr_len: *usize,
-) callconv(.c) i32 {
-    const slice = buf_ptr[0..buf_len];
-    const path_str = path_ptr[0..path_len];
-    const peek_flags: peek_mod.PeekFlags = @bitCast(flags);
-
-    var result = peek_mod.peekDisplay(page_allocator, slice, path_str, peek_flags) catch return -13;
-
-    // Transfer ownership to caller
-    out_stdout_ptr.* = result.stdout_buf.ptr;
-    out_stdout_len.* = result.stdout_buf.len;
-    out_stderr_ptr.* = result.stderr_buf.ptr;
-    out_stderr_len.* = result.stderr_buf.len;
-
-    const had_error = result.is_error;
-
-    // Prevent deinit from freeing the buffers we just handed off
-    result.stdout_buf = &.{};
-    result.stderr_buf = &.{};
-
-    return if (had_error) @as(i32, -1) else @as(i32, 0);
-}
-
-// ---------------------------------------------------------------------------
-// Poke C FFI exports
-// ---------------------------------------------------------------------------
-
-const poke_mod = blip.poke_mod;
-
-/// Modify a value in a BLIP archive at the given path expression.
-/// Returns 0 on success, negative error code on failure.
-/// Caller must free out_buf with blip_free().
-export fn blip_poke(
-    buf: [*]const u8,
-    buf_len: usize,
-    path: [*]const u8,
-    path_len: usize,
-    new_value: [*]const u8,
-    new_value_len: usize,
-    out_buf: *[*]u8,
-    out_len: *usize,
-) callconv(.c) i32 {
-    const slice = buf[0..buf_len];
-    const path_str = path[0..path_len];
-    const value_slice = if (new_value_len > 0) new_value[0..new_value_len] else &[_]u8{};
-
-    const result = poke_mod.pokeArchive(page_allocator, slice, path_str, value_slice) catch |e| {
-        return switch (e) {
-            error.ImmutableTarget => @as(i32, -16),
-            error.NotALeaf => @as(i32, -17),
-            error.OutOfMemory => @as(i32, -13),
-            error.InvalidContainerType => @as(i32, -1),
-            error.InvalidLength => @as(i32, -2),
-            error.LengthExceedsBounds => @as(i32, -3),
-            error.MissingRequiredKey => @as(i32, -4),
-            error.DuplicateKey => @as(i32, -5),
-            error.KeysNotSorted => @as(i32, -6),
-            error.HashMismatch => @as(i32, -7),
-            error.IndexOutOfBounds => @as(i32, -8),
-            error.InvalidMagic => @as(i32, -9),
-            error.BufferTooSmall => @as(i32, -10),
-            error.UnexpectedEndOfInput => @as(i32, -11),
-            error.Overflow => @as(i32, -12),
-            error.UnclosedBracket, error.EmptyBracket, error.InvalidIndex, error.UnexpectedCharacter => @as(i32, -15),
-            error.MissingSigil => @as(i32, -25),
-            error.InvalidSigilOrder => @as(i32, -26),
-            error.MissingDecompLen => @as(i32, -27),
-        };
-    };
-
-    out_buf.* = result.ptr;
-    out_len.* = result.len;
-    return 0;
-}
-
-/// Decode printable-binary UTF-8 back to raw bytes.
-/// Caller must free the output buffer with blip_free().
-export fn blip_decode_printable_binary(
-    encoded: [*]const u8,
-    encoded_len: usize,
-    out_buf: *[*]u8,
-    out_len: *usize,
-) callconv(.c) i32 {
-    const result = pb.decode(page_allocator, encoded[0..encoded_len], .{}) catch return -1;
-    out_buf.* = result.ptr;
-    out_len.* = result.len;
-    return 0;
-}
-
-/// Encode binary data as printable-binary UTF-8.
-/// Caller must free the output buffer with blip_free().
-export fn blip_encode_printable_binary(
-    input: [*]const u8,
-    input_len: usize,
-    out_buf: *[*]u8,
-    out_len: *usize,
-) callconv(.c) i32 {
-    const input_slice = if (input_len > 0) input[0..input_len] else &[_]u8{};
-    const encoded = pb.encode(page_allocator, input_slice, .{}) catch return -13;
-    out_buf.* = encoded.ptr;
-    out_len.* = encoded.len;
-    return 0;
-}
-
-// ---------------------------------------------------------------------------
-// JSON serde C FFI exports
-// ---------------------------------------------------------------------------
-
-const json_serde = blip.json_serde;
-
-/// Map JsonSerdeError to a C FFI error code.
-fn jsonSerdeErrorCode(err: json_serde.JsonSerdeError) i32 {
-    return switch (err) {
-        error.OutOfMemory => -13,
-        error.InvalidJson => -18,
-        error.MissingRequiredField => -19,
-        error.InvalidEntryType => -20,
-        error.InvalidTimestamp => -21,
-        error.InvalidMode => -22,
-        error.InvalidContainerType => -1,
-        error.InvalidLength => -2,
-        error.LengthExceedsBounds => -3,
-        error.MissingRequiredKey => -4,
-        error.DuplicateKey => -5,
-        error.KeysNotSorted => -6,
-        error.HashMismatch => -7,
-        error.IndexOutOfBounds => -8,
-        error.InvalidMagic => -9,
-        error.BufferTooSmall => -10,
-        error.UnexpectedEndOfInput => -11,
-        error.Overflow => -12,
-        error.MissingSigil => -25,
-        error.InvalidSigilOrder => -26,
-        error.MissingDecompLen => -27,
-    };
-}
-
-/// Convert a BLIP archive to JSON.
-/// Returns 0 on success, negative error code on failure.
-/// Caller must free output buffer with blip_free().
-export fn blip_to_json(
-    buf: [*]const u8,
-    buf_len: usize,
-    out_buf: *[*]u8,
-    out_len: *usize,
-) callconv(.c) i32 {
-    const slice = buf[0..buf_len];
-    const result = json_serde.archiveToJson(page_allocator, slice) catch |e| {
-        return jsonSerdeErrorCode(e);
-    };
-    out_buf.* = result.ptr;
-    out_len.* = result.len;
-    return 0;
-}
-
-/// Convert JSON to a BLIP archive.
-/// Returns 0 on success, negative error code on failure.
-/// Caller must free output buffer with blip_free().
-export fn blip_from_json(
-    json_buf: [*]const u8,
-    json_len: usize,
-    out_buf: *[*]u8,
-    out_len: *usize,
-) callconv(.c) i32 {
-    const json_slice = json_buf[0..json_len];
-    const result = json_serde.jsonToArchive(page_allocator, json_slice) catch |e| {
-        return jsonSerdeErrorCode(e);
-    };
-    out_buf.* = result.ptr;
-    out_len.* = result.len;
-    return 0;
-}
-
 // ---------------------------------------------------------------------------
 // LZMA2 compression C FFI exports
 // ---------------------------------------------------------------------------
 
-const lzma2_mod = blip.lzma2_mod;
-
-/// Check if a buffer is a compressed LP container (has COMP attribute).
-export fn blip_is_compressed(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
-    return blip.compression_mod.isCompressed(buf[0..buf_len]);
-}
-
+const lzma2_mod = @import("lzma2.zig");
 /// Compress a BLIP container with LZMA2.
 /// Input: any serialized BLIP container bytes.
 /// Output: a DATA container with COMP=lzma2, DECOMP_LEN, and CSUM=blake3_128 attributes.
@@ -1172,124 +850,13 @@ export fn blar_lzma2_decompress(
 // Generic compression C FFI exports
 // ---------------------------------------------------------------------------
 
-const compression_mod = blip.compression_mod;
-const CompressionId = mini_blar.container_mod.CompressionId;
-
-/// Compress a BLIP container with the specified algorithm.
-/// algo_id: 1=lzma2, 2=bzip2, 3=lz4, 4=zstd
-/// progress_fn/progress_ctx: optional callback reporting (bytes_done, bytes_total).
-/// Returns 0 on success, negative error code on failure.
-/// Caller must free output buffer with blip_free().
-export fn blip_compress_container(
-    buf: [*]const u8,
-    buf_len: usize,
-    algo_id: u8,
-    num_threads: u8,
-    progress_fn: compression_mod.CompressProgressFn,
-    phase_fn: compression_mod.PhaseFn,
-    progress_ctx: ?*anyopaque,
-    out_buf: *[*]u8,
-    out_len: *usize,
-) callconv(.c) i32 {
-    const algo = std.meta.intToEnum(CompressionId, @as(u7, @truncate(algo_id))) catch return -32;
-    const slice = buf[0..buf_len];
-    const result = compression_mod.compressContainer(page_allocator, algo, slice, progress_fn, phase_fn, progress_ctx, num_threads) catch |e| switch (e) {
-        error.OutOfMemory => return -13,
-        error.CompressionFailed => return -24,
-        error.UnsupportedCompression => return -32,
-        else => return -1,
-    };
-    out_buf.* = result.ptr;
-    out_len.* = result.len;
-    return 0;
-}
-
-/// Decompress a compressed LP container (any algorithm).
-/// Reads the algorithm from the LP header's COMP attribute.
-/// Verifies checksum before decompressing.
-/// Returns 0 on success, negative error code on failure.
-/// Caller must free output buffer with blip_free().
-export fn blip_decompress_container(
-    buf: [*]const u8,
-    buf_len: usize,
-    out_buf: *[*]u8,
-    out_len: *usize,
-) callconv(.c) i32 {
-    const slice = buf[0..buf_len];
-    const result = compression_mod.decompressContainer(page_allocator, slice) catch |e| switch (e) {
-        error.OutOfMemory => return -13,
-        error.DecompressionFailed => return -23,
-        error.UnsupportedCompression => return -32,
-        error.HashMismatch => return -7,
-        else => return -1,
-    };
-    out_buf.* = result.ptr;
-    out_len.* = result.len;
-    return 0;
-}
-
+const compression_mod = @import("compression.zig");
+const CompressionId = archive.container_mod.CompressionId;
 // ---------------------------------------------------------------------------
 // Encryption C FFI exports
 // ---------------------------------------------------------------------------
 
-const encryption_mod = blip.encryption;
-const enc_container_mod = mini_blar.container_mod;
-
-/// Check if a buffer is an encrypted LP container (has ENC attribute).
-export fn blip_is_encrypted(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
-    return encryption_mod.isEncrypted(buf[0..buf_len]);
-}
-
-/// Encrypt a serialized container.
-/// enc_id: 1=AES-256-GCM, 2=ChaCha20-Poly1305
-/// kdf_id: 1=Argon2id, 2=PBKDF2-SHA256
-export fn blip_encrypt_container(
-    buf: [*]const u8,
-    buf_len: usize,
-    password: [*]const u8,
-    password_len: usize,
-    enc_id_raw: u8,
-    kdf_id_raw: u8,
-    out_buf: *[*]u8,
-    out_len: *usize,
-) callconv(.c) i32 {
-    const enc_id = std.meta.intToEnum(enc_container_mod.EncryptionId, @as(u7, @truncate(enc_id_raw))) catch return -1;
-    const kdf_id = std.meta.intToEnum(enc_container_mod.KdfId, @as(u7, @truncate(kdf_id_raw))) catch return -1;
-    const result = encryption_mod.encryptContainer(
-        page_allocator,
-        enc_id,
-        kdf_id,
-        buf[0..buf_len],
-        password[0..password_len],
-    ) catch |e| {
-        return encryptionErrorCode(e);
-    };
-    out_buf.* = result.ptr;
-    out_len.* = result.len;
-    return 0;
-}
-
-/// Decrypt an encrypted LP container.
-export fn blip_decrypt_container(
-    buf: [*]const u8,
-    buf_len: usize,
-    password: [*]const u8,
-    password_len: usize,
-    out_buf: *[*]u8,
-    out_len: *usize,
-) callconv(.c) i32 {
-    const result = encryption_mod.decryptContainer(
-        page_allocator,
-        buf[0..buf_len],
-        password[0..password_len],
-    ) catch |e| {
-        return encryptionErrorCode(e);
-    };
-    out_buf.* = result.ptr;
-    out_len.* = result.len;
-    return 0;
-}
-
+const enc_container_mod = archive.container_mod;
 fn encryptionErrorCode(err: anytype) i32 {
     return switch (err) {
         error.AuthenticationFailed => -28,
@@ -1307,7 +874,7 @@ fn encryptionErrorCode(err: anytype) i32 {
 // ZIP container C FFI exports
 // ---------------------------------------------------------------------------
 
-const zip_mod = blip.zip_mod;
+const zip_mod = @import("zip.zig");
 
 /// Check if buffer starts with ZIP magic bytes (PK\x03\x04).
 export fn blar_is_zip(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
@@ -1421,7 +988,7 @@ export fn blar_entry_container_type(
     out_type: *?[*]const u8,
     out_type_len: *usize,
 ) callconv(.c) i32 {
-    const reader = mini_blar.ArchiveReader.init(buf[0..buf_len]) catch return -1;
+    const reader = archive.ArchiveReader.init(buf[0..buf_len]) catch return -1;
     const entry_type = reader.entryTypeAt(index) catch return -8;
     if (entry_type != .dir) {
         out_type.* = null;
@@ -1436,7 +1003,7 @@ export fn blar_entry_container_type(
         return 0;
     };
     const co_container = dir_dict.valueAt(co_idx) catch return -1;
-    const co_val = mini_blar.leaf.readUtf8(co_container) catch return -1;
+    const co_val = archive.leaf.readUtf8(co_container) catch return -1;
     out_type.* = co_val.ptr;
     out_type_len.* = co_val.len;
     return 0;
@@ -1449,7 +1016,7 @@ export fn blar_entry_zip_comp(
     index: u64,
     out_method: *u16,
 ) callconv(.c) i32 {
-    const reader = mini_blar.ArchiveReader.init(buf[0..buf_len]) catch return -1;
+    const reader = archive.ArchiveReader.init(buf[0..buf_len]) catch return -1;
     const entry_type = reader.entryTypeAt(index) catch return -8;
     if (entry_type != .file) {
         out_method.* = 0xFFFF;
@@ -1464,7 +1031,7 @@ export fn blar_entry_zip_comp(
         return 0;
     };
     const zc_container = meta_dict.valueAt(zc_idx) catch return -1;
-    const zc_bytes = mini_blar.leaf.readData(zc_container) catch return -1;
+    const zc_bytes = archive.leaf.readData(zc_container) catch return -1;
     if (zc_bytes.len != 2) return -1;
     out_method.* = std.mem.readInt(u16, zc_bytes[0..2], .little);
     return 0;
@@ -1474,22 +1041,25 @@ export fn blar_entry_zip_comp(
 // PDF container FFI exports
 // ---------------------------------------------------------------------------
 
-const pdf_mod = blip.pdf_mod;
-const jxl_mod = blip.jxl_mod;
-const png_mod = blip.png_mod;
-const bmp_mod = blip.bmp_mod;
-const tar_mod = blip.tar_mod;
-const tiff_mod = blip.tiff_mod;
-const gif_mod = blip.gif_mod;
-const tga_mod = blip.tga_mod;
-const wav_mod = blip.wav_mod;
-const flac_mod = blip.flac_mod;
-const nifti_mod = blip.nifti_mod;
-const dicom_mod = blip.dicom_mod;
-const expansion_mod = blip.expansion_mod;
-const streaming_mod = blip.streaming_mod;
-const fits_mod = blip.fits_mod;
-const aiff_mod = blip.aiff_mod;
+const pdf_mod = @import("pdf.zig");
+const jxl_mod = @import("jxl.zig");
+const png_mod = @import("png.zig");
+const bmp_mod = @import("bmp.zig");
+const tar_mod = @import("tar.zig");
+const tiff_mod = @import("tiff.zig");
+const gif_mod = @import("gif.zig");
+const tga_mod = @import("tga.zig");
+const wav_mod = @import("wav.zig");
+const flac_mod = @import("flac.zig");
+const nifti_mod = @import("nifti.zig");
+const dicom_mod = @import("dicom.zig");
+const expansion_mod = @import("expansion.zig");
+const encryption_mod = @import("encryption.zig");
+const poke_mod = @import("poke.zig");
+const json_serde = @import("json_serde.zig");
+const streaming_mod = @import("streaming.zig");
+const fits_mod = @import("fits.zig");
+const aiff_mod = @import("aiff.zig");
 
 /// Check if buffer starts with PDF magic bytes (%PDF-).
 export fn blar_is_pdf(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
@@ -2637,7 +2207,7 @@ export fn blar_create_streaming(
     out_len: *usize,
 ) callconv(.c) i32 {
     // Convert C entries to Zig ArchiveEntry, reading content from source_path
-    const mini = blip.mini_blar_mod;
+    const mini = @import("archive.zig");
     
 
     const zig_entries = page_allocator.alloc(mini.ArchiveEntry, entry_count) catch return -13;
@@ -2654,10 +2224,10 @@ export fn blar_create_streaming(
         const ce = c_entries[i];
         if (ce.is_dir != 0) {
             // Convert xattrs for dir
-            const dir_xa: []const mini_blar.XattrEntry = if (ce.xattrs) |xa_ptr| blk: {
+            const dir_xa: []const archive.XattrEntry = if (ce.xattrs) |xa_ptr| blk: {
                 const xa_count = ce.xattr_count;
                 if (xa_count == 0) break :blk &.{};
-                const xa_zig = page_allocator.alloc(mini_blar.XattrEntry, xa_count) catch break :blk &[_]mini_blar.XattrEntry{};
+                const xa_zig = page_allocator.alloc(archive.XattrEntry, xa_count) catch break :blk &[_]archive.XattrEntry{};
                 for (0..xa_count) |xi| {
                     xa_zig[xi] = .{
                         .name = xa_ptr[xi].name[0..xa_ptr[xi].name_len],
@@ -2696,10 +2266,10 @@ export fn blar_create_streaming(
             }
 
             // Convert xattrs
-            const xattr_slice: []const mini_blar.XattrEntry = if (ce.xattrs) |xa_ptr| blk: {
+            const xattr_slice: []const archive.XattrEntry = if (ce.xattrs) |xa_ptr| blk: {
                 const xa_count = ce.xattr_count;
                 if (xa_count == 0) break :blk &.{};
-                const xa_zig = page_allocator.alloc(mini_blar.XattrEntry, xa_count) catch break :blk &[_]mini_blar.XattrEntry{};
+                const xa_zig = page_allocator.alloc(archive.XattrEntry, xa_count) catch break :blk &[_]archive.XattrEntry{};
                 for (0..xa_count) |xi| {
                     xa_zig[xi] = .{
                         .name = xa_ptr[xi].name[0..xa_ptr[xi].name_len],
@@ -2732,7 +2302,7 @@ export fn blar_create_streaming(
         }
     }
 
-    const CompId = mini_blar.container_mod.CompressionId;
+    const CompId = archive.container_mod.CompressionId;
     const comp: ?CompId = if (per_file_comp_algo == 0) null else std.meta.intToEnum(CompId, @as(u7, @truncate(per_file_comp_algo))) catch return -32;
 
     
@@ -3022,7 +2592,7 @@ export fn blar_entry_pdf_offset(
     index: u64,
     out: *u64,
 ) callconv(.c) i32 {
-    const reader = mini_blar.ArchiveReader.init(buf[0..buf_len]) catch return -1;
+    const reader = archive.ArchiveReader.init(buf[0..buf_len]) catch return -1;
     const entry_type = reader.entryTypeAt(index) catch return -8;
     if (entry_type != .file) {
         out.* = 0xFFFFFFFFFFFFFFFF;
@@ -3036,7 +2606,7 @@ export fn blar_entry_pdf_offset(
         return 0;
     };
     const po_container = meta_dict.valueAt(po_idx) catch return -1;
-    const po_bytes = mini_blar.leaf.readData(po_container) catch return -1;
+    const po_bytes = archive.leaf.readData(po_container) catch return -1;
     if (po_bytes.len != 8) return -1;
     out.* = std.mem.readInt(u64, po_bytes[0..8], .little);
     return 0;
@@ -3049,7 +2619,7 @@ export fn blar_entry_pdf_length(
     index: u64,
     out: *u64,
 ) callconv(.c) i32 {
-    const reader = mini_blar.ArchiveReader.init(buf[0..buf_len]) catch return -1;
+    const reader = archive.ArchiveReader.init(buf[0..buf_len]) catch return -1;
     const entry_type = reader.entryTypeAt(index) catch return -8;
     if (entry_type != .file) {
         out.* = 0xFFFFFFFFFFFFFFFF;
@@ -3063,7 +2633,7 @@ export fn blar_entry_pdf_length(
         return 0;
     };
     const pl_container = meta_dict.valueAt(pl_idx) catch return -1;
-    const pl_bytes = mini_blar.leaf.readData(pl_container) catch return -1;
+    const pl_bytes = archive.leaf.readData(pl_container) catch return -1;
     if (pl_bytes.len != 8) return -1;
     out.* = std.mem.readInt(u64, pl_bytes[0..8], .little);
     return 0;
@@ -3077,7 +2647,7 @@ export fn blar_entry_jxl_source(
     out_fmt: *?[*]const u8,
     out_fmt_len: *usize,
 ) callconv(.c) i32 {
-    const reader = mini_blar.ArchiveReader.init(buf[0..buf_len]) catch return -1;
+    const reader = archive.ArchiveReader.init(buf[0..buf_len]) catch return -1;
     const entry_type = reader.entryTypeAt(index) catch return -8;
     if (entry_type != .file) {
         out_fmt.* = null;
@@ -3093,7 +2663,7 @@ export fn blar_entry_jxl_source(
         return 0;
     };
     const jx_container = meta_dict.valueAt(jx_idx) catch return -1;
-    const jx_val = mini_blar.leaf.readUtf8(jx_container) catch return -1;
+    const jx_val = archive.leaf.readUtf8(jx_container) catch return -1;
     out_fmt.* = jx_val.ptr;
     out_fmt_len.* = jx_val.len;
     return 0;
@@ -3144,13 +2714,13 @@ test "normalizePath handles edge cases" {
     try std.testing.expectEqualSlices(u8, "", normalizePath(""));
 }
 
-test "C FFI: blip_normalize_path works" {
+test "C FFI: blar_normalize_path works" {
     var out_path: [*]const u8 = undefined;
     var out_len: usize = undefined;
-    blip_normalize_path("/tmp/bft/a.txt", 14, &out_path, &out_len);
+    blar_normalize_path("/tmp/bft/a.txt", 14, &out_path, &out_len);
     try std.testing.expectEqualSlices(u8, "tmp/bft/a.txt", out_path[0..out_len]);
 
-    blip_normalize_path("./foo/bar", 9, &out_path, &out_len);
+    blar_normalize_path("./foo/bar", 9, &out_path, &out_len);
     try std.testing.expectEqualSlices(u8, "foo/bar", out_path[0..out_len]);
 }
 
@@ -3297,7 +2867,7 @@ test "C FFI: blar_file_content returns correct data" {
     var data_ptr: [*]u8 = undefined;
     var data_len: usize = undefined;
     try std.testing.expectEqual(@as(i32, 0), blar_file_content(out_buf, out_len, 0, &data_ptr, &data_len));
-    defer blip_free_content(data_ptr, data_len);
+    defer blar_free_content(data_ptr, data_len);
     try std.testing.expectEqualSlices(u8, "hello world", data_ptr[0..data_len]);
 }
 
@@ -3315,7 +2885,7 @@ test "C FFI: blar_file_content_by_path finds file" {
     var data_len: usize = undefined;
     try std.testing.expectEqual(@as(i32, 0), blar_file_content_by_path(out_buf, out_len, "b.txt", 5, &data_ptr, &data_len));
     try std.testing.expectEqualSlices(u8, "bbb", data_ptr[0..data_len]);
-    blip_free_content(data_ptr, data_len);
+    blar_free_content(data_ptr, data_len);
 
     try std.testing.expectEqual(@as(i32, -14), blar_file_content_by_path(out_buf, out_len, "nope", 4, &data_ptr, &data_len));
 }
@@ -3346,13 +2916,13 @@ test "C FFI: bzip2 compress+decompress multi-block archive" {
 
     var out_buf: [*]u8 = undefined;
     var out_len: usize = undefined;
-    const rc = blip_compress_container(&data, data.len, 2, 0, null, null, null, &out_buf, &out_len);
+    const rc = blar_compress_container(&data, data.len, 2, 0, null, null, null, &out_buf, &out_len);
     try std.testing.expectEqual(@as(i32, 0), rc);
     defer blip_free(out_buf, out_len);
 
     var dec_buf: [*]u8 = undefined;
     var dec_len: usize = undefined;
-    const rc2 = blip_decompress_container(out_buf, out_len, &dec_buf, &dec_len);
+    const rc2 = blar_decompress_container(out_buf, out_len, &dec_buf, &dec_len);
     try std.testing.expectEqual(@as(i32, 0), rc2);
     defer blip_free(dec_buf, dec_len);
 
@@ -3761,13 +3331,13 @@ test "C FFI: blip_peek returns error for invalid path" {
 // Encryption FFI tests
 // ---------------------------------------------------------------------------
 
-test "C FFI: blip_encrypt_container and blip_decrypt_container round-trip" {
+test "C FFI: blar_encrypt_container and blar_decrypt_container round-trip" {
     const data_bytes = try leaf.serializeData(std.testing.allocator, "FFI encryption test");
     defer std.testing.allocator.free(data_bytes);
 
     var encrypted_buf: [*]u8 = undefined;
     var encrypted_len: usize = 0;
-    const enc_rc = blip_encrypt_container(
+    const enc_rc = blar_encrypt_container(
         data_bytes.ptr,
         data_bytes.len,
         "test-password",
@@ -3782,7 +3352,7 @@ test "C FFI: blip_encrypt_container and blip_decrypt_container round-trip" {
 
     var decrypted_buf: [*]u8 = undefined;
     var decrypted_len: usize = 0;
-    const dec_rc = blip_decrypt_container(
+    const dec_rc = blar_decrypt_container(
         encrypted_buf,
         encrypted_len,
         "test-password",
@@ -3796,35 +3366,35 @@ test "C FFI: blip_encrypt_container and blip_decrypt_container round-trip" {
     try std.testing.expectEqualSlices(u8, data_bytes, decrypted_buf[0..decrypted_len]);
 }
 
-test "C FFI: blip_is_encrypted detects encrypted containers" {
+test "C FFI: blar_is_encrypted detects encrypted containers" {
     const data_bytes = try leaf.serializeData(std.testing.allocator, "test");
     defer std.testing.allocator.free(data_bytes);
 
-    try std.testing.expect(!blip_is_encrypted(data_bytes.ptr, data_bytes.len));
+    try std.testing.expect(!blar_is_encrypted(data_bytes.ptr, data_bytes.len));
 
     var encrypted_buf: [*]u8 = undefined;
     var encrypted_len: usize = 0;
     // Use PBKDF2 (kdf_id=2) for speed in test
-    const rc = blip_encrypt_container(data_bytes.ptr, data_bytes.len, "p", 1, 1, 2, &encrypted_buf, &encrypted_len);
+    const rc = blar_encrypt_container(data_bytes.ptr, data_bytes.len, "p", 1, 1, 2, &encrypted_buf, &encrypted_len);
     try std.testing.expectEqual(@as(i32, 0), rc);
     defer blip_free(encrypted_buf, encrypted_len);
 
-    try std.testing.expect(blip_is_encrypted(encrypted_buf, encrypted_len));
+    try std.testing.expect(blar_is_encrypted(encrypted_buf, encrypted_len));
 }
 
-test "C FFI: blip_decrypt_container with wrong password returns auth error" {
+test "C FFI: blar_decrypt_container with wrong password returns auth error" {
     const data_bytes = try leaf.serializeData(std.testing.allocator, "secret");
     defer std.testing.allocator.free(data_bytes);
 
     var encrypted_buf: [*]u8 = undefined;
     var encrypted_len: usize = 0;
     // Use PBKDF2 (kdf_id=2) for speed
-    _ = blip_encrypt_container(data_bytes.ptr, data_bytes.len, "correct", 7, 1, 2, &encrypted_buf, &encrypted_len);
+    _ = blar_encrypt_container(data_bytes.ptr, data_bytes.len, "correct", 7, 1, 2, &encrypted_buf, &encrypted_len);
     defer blip_free(encrypted_buf, encrypted_len);
 
     var decrypted_buf: [*]u8 = undefined;
     var decrypted_len: usize = 0;
-    const rc = blip_decrypt_container(encrypted_buf, encrypted_len, "wrong", 5, &decrypted_buf, &decrypted_len);
+    const rc = blar_decrypt_container(encrypted_buf, encrypted_len, "wrong", 5, &decrypted_buf, &decrypted_len);
     try std.testing.expectEqual(@as(i32, -28), rc);
 }
 
@@ -3846,101 +3416,6 @@ pub const CSegment = extern struct {
     data: [*]u8,
     len: usize,
 };
-
-/// Split `data` into SEGMENT containers, each carrying at most `max_payload`
-/// bytes of VAL.
-/// `csum_id`: 0 = no per-segment checksum; otherwise a ChecksumId u8 value.
-/// On success returns 0 and writes:
-///   *out_segments: array of CSegment (length *out_count)
-///   *out_count:    number of segments
-/// Caller must free with blip_segment_array_free(*out_segments, *out_count).
-export fn blip_segment_chunk(
-    data: [*]const u8,
-    data_len: usize,
-    max_payload: usize,
-    stream_id: u64,
-    csum_id: u8,
-    out_segments: *[*]CSegment,
-    out_count: *usize,
-) callconv(.c) i32 {
-    const ChecksumId = mini_blar.container_mod.ChecksumId;
-    const cid: ?ChecksumId = if (csum_id == 0) null else std.meta.intToEnum(ChecksumId, @as(u7, @truncate(csum_id))) catch return -50;
-    const segs = segmentation_mod.chunkBytes(page_allocator, data[0..data_len], max_payload, stream_id, cid) catch |e| return segErrorCode(e);
-    const arr = page_allocator.alloc(CSegment, segs.len) catch {
-        for (segs) |s| page_allocator.free(s);
-        page_allocator.free(segs);
-        return -13;
-    };
-    for (segs, 0..) |s, i| arr[i] = .{ .data = s.ptr, .len = s.len };
-    // Free the outer spine but not the inner buffers (transferred to arr).
-    page_allocator.free(segs);
-    out_segments.* = arr.ptr;
-    out_count.* = arr.len;
-    return 0;
-}
-
-/// Free an array of CSegment returned by blip_segment_chunk, including each
-/// segment's data buffer.
-export fn blip_segment_array_free(segments: [*]CSegment, count: usize) callconv(.c) void {
-    for (0..count) |i| page_allocator.free(segments[i].data[0..segments[i].len]);
-    page_allocator.free(segments[0..count]);
-}
-
-/// Reassemble a list of SEGMENT-container byte slices into the original payload.
-/// On success returns 0 and writes the reassembled bytes to *out_buf / *out_len.
-/// Caller must free with blip_free.
-export fn blip_segment_reassemble(
-    segments: [*]const CSegment,
-    count: usize,
-    expected_stream_id: u64,
-    out_buf: *[*]u8,
-    out_len: *usize,
-) callconv(.c) i32 {
-    if (count == 0) return -51; // MissingSegments
-    const slices = page_allocator.alloc([]const u8, count) catch return -13;
-    defer page_allocator.free(slices);
-    for (0..count) |i| slices[i] = segments[i].data[0..segments[i].len];
-    const out = segmentation_mod.reassemble(page_allocator, slices, expected_stream_id) catch |e| return segErrorCode(e);
-    out_buf.* = out.ptr;
-    out_len.* = out.len;
-    return 0;
-}
-
-/// Quick check: does this byte slice parse as a SEGMENT container?
-/// Returns 0 = not a segment, 1 = is a segment, negative = parse error.
-export fn blip_segment_is_segment(data: [*]const u8, data_len: usize) callconv(.c) i32 {
-    const info = segmentation_mod.parseSegment(data[0..data_len]) catch |e| switch (e) {
-        error.NotASegment => return 0,
-        else => return -50,
-    };
-    _ = info;
-    return 1;
-}
-
-/// Read just the (I, M, N) header from a SEGMENT container, without reassembly.
-/// `out_total` receives the N value; if N is NIL, *out_total_is_nil is set to 1.
-/// Returns 0 on success, negative on error.
-export fn blip_segment_header(
-    data: [*]const u8,
-    data_len: usize,
-    out_stream_id: *u64,
-    out_seg_index: *u64,
-    out_total: *u64,
-    out_total_is_nil: *u8,
-) callconv(.c) i32 {
-    const info = segmentation_mod.parseSegment(data[0..data_len]) catch |e| return segErrorCode(e);
-    out_stream_id.* = info.stream_id;
-    out_seg_index.* = info.seg_index;
-    if (info.total) |n| {
-        out_total.* = n;
-        out_total_is_nil.* = 0;
-    } else {
-        out_total.* = 0;
-        out_total_is_nil.* = 1;
-    }
-    return 0;
-}
-
 fn segErrorCode(e: anyerror) i32 {
     return switch (e) {
         error.NotASegment => -50,
@@ -3954,8 +3429,221 @@ fn segErrorCode(e: anyerror) i32 {
     };
 }
 
-/// Compute xxhash64 of a byte buffer.  Returns the 64-bit hash (host-native order).
-/// Compatible with `xxhsum -H64`.
-export fn blip_xxhash64(data: [*]const u8, data_len: usize) callconv(.c) u64 {
-    return std.hash.XxHash64.hash(0, data[0..data_len]);
+// ---------------------------------------------------------------------------
+// Re-introduced blar-side wrappers (originally blip_* in the umbrella; not in libblip.a)
+// ---------------------------------------------------------------------------
+export fn blar_compress_container(
+    buf: [*]const u8,
+    buf_len: usize,
+    algo_id: u8,
+    num_threads: u8,
+    progress_fn: compression_mod.CompressProgressFn,
+    phase_fn: compression_mod.PhaseFn,
+    progress_ctx: ?*anyopaque,
+    out_buf: *[*]u8,
+    out_len: *usize,
+) callconv(.c) i32 {
+    const algo = std.meta.intToEnum(CompressionId, @as(u7, @truncate(algo_id))) catch return -32;
+    const slice = buf[0..buf_len];
+    const result = compression_mod.compressContainer(page_allocator, algo, slice, progress_fn, phase_fn, progress_ctx, num_threads) catch |e| switch (e) {
+        error.OutOfMemory => return -13,
+        error.CompressionFailed => return -24,
+        error.UnsupportedCompression => return -32,
+        else => return -1,
+    };
+    out_buf.* = result.ptr;
+    out_len.* = result.len;
+    return 0;
 }
+
+export fn blar_decompress_container(
+    buf: [*]const u8,
+    buf_len: usize,
+    out_buf: *[*]u8,
+    out_len: *usize,
+) callconv(.c) i32 {
+    const slice = buf[0..buf_len];
+    const result = compression_mod.decompressContainer(page_allocator, slice) catch |e| switch (e) {
+        error.OutOfMemory => return -13,
+        error.DecompressionFailed => return -23,
+        error.UnsupportedCompression => return -32,
+        error.HashMismatch => return -7,
+        else => return -1,
+    };
+    out_buf.* = result.ptr;
+    out_len.* = result.len;
+    return 0;
+}
+
+export fn blar_encrypt_container(
+    buf: [*]const u8,
+    buf_len: usize,
+    password: [*]const u8,
+    password_len: usize,
+    enc_id_raw: u8,
+    kdf_id_raw: u8,
+    out_buf: *[*]u8,
+    out_len: *usize,
+) callconv(.c) i32 {
+    const enc_id = std.meta.intToEnum(enc_container_mod.EncryptionId, @as(u7, @truncate(enc_id_raw))) catch return -1;
+    const kdf_id = std.meta.intToEnum(enc_container_mod.KdfId, @as(u7, @truncate(kdf_id_raw))) catch return -1;
+    const result = encryption_mod.encryptContainer(
+        page_allocator,
+        enc_id,
+        kdf_id,
+        buf[0..buf_len],
+        password[0..password_len],
+    ) catch |e| {
+        return encryptionErrorCode(e);
+    };
+    out_buf.* = result.ptr;
+    out_len.* = result.len;
+    return 0;
+}
+
+export fn blar_decrypt_container(
+    buf: [*]const u8,
+    buf_len: usize,
+    password: [*]const u8,
+    password_len: usize,
+    out_buf: *[*]u8,
+    out_len: *usize,
+) callconv(.c) i32 {
+    const result = encryption_mod.decryptContainer(
+        page_allocator,
+        buf[0..buf_len],
+        password[0..password_len],
+    ) catch |e| {
+        return encryptionErrorCode(e);
+    };
+    out_buf.* = result.ptr;
+    out_len.* = result.len;
+    return 0;
+}
+
+export fn blar_free_content(ptr: [*]u8, len: usize) callconv(.c) void {
+    if (len > 0) {
+        page_allocator.free(ptr[0..len]);
+    }
+}
+
+export fn blar_is_encrypted(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
+    return encryption_mod.isEncrypted(buf[0..buf_len]);
+}
+
+export fn blar_normalize_path(
+    path: [*]const u8,
+    path_len: usize,
+    out_path: *[*]const u8,
+    out_path_len: *usize,
+) callconv(.c) void {
+    const input = path[0..path_len];
+    const result = normalizePath(input);
+    out_path.* = result.ptr;
+    out_path_len.* = result.len;
+}
+
+export fn blar_poke(
+    buf: [*]const u8,
+    buf_len: usize,
+    path: [*]const u8,
+    path_len: usize,
+    new_value: [*]const u8,
+    new_value_len: usize,
+    out_buf: *[*]u8,
+    out_len: *usize,
+) callconv(.c) i32 {
+    const slice = buf[0..buf_len];
+    const path_str = path[0..path_len];
+    const value_slice = if (new_value_len > 0) new_value[0..new_value_len] else &[_]u8{};
+
+    const result = poke_mod.pokeArchive(page_allocator, slice, path_str, value_slice) catch |e| {
+        return switch (e) {
+            error.ImmutableTarget => @as(i32, -16),
+            error.NotALeaf => @as(i32, -17),
+            error.OutOfMemory => @as(i32, -13),
+            error.InvalidContainerType => @as(i32, -1),
+            error.InvalidLength => @as(i32, -2),
+            error.LengthExceedsBounds => @as(i32, -3),
+            error.MissingRequiredKey => @as(i32, -4),
+            error.DuplicateKey => @as(i32, -5),
+            error.KeysNotSorted => @as(i32, -6),
+            error.HashMismatch => @as(i32, -7),
+            error.IndexOutOfBounds => @as(i32, -8),
+            error.InvalidMagic => @as(i32, -9),
+            error.BufferTooSmall => @as(i32, -10),
+            error.UnexpectedEndOfInput => @as(i32, -11),
+            error.Overflow => @as(i32, -12),
+            error.UnclosedBracket, error.EmptyBracket, error.InvalidIndex, error.UnexpectedCharacter => @as(i32, -15),
+            error.MissingSigil => @as(i32, -25),
+            error.InvalidSigilOrder => @as(i32, -26),
+            error.MissingDecompLen => @as(i32, -27),
+        };
+    };
+
+    out_buf.* = result.ptr;
+    out_len.* = result.len;
+    return 0;
+}
+
+export fn blar_to_json(
+    buf: [*]const u8,
+    buf_len: usize,
+    out_buf: *[*]u8,
+    out_len: *usize,
+) callconv(.c) i32 {
+    const slice = buf[0..buf_len];
+    const result = json_serde.archiveToJson(page_allocator, slice) catch |e| {
+        return jsonSerdeErrorCode(e);
+    };
+    out_buf.* = result.ptr;
+    out_len.* = result.len;
+    return 0;
+}
+
+export fn blar_from_json(
+    json_buf: [*]const u8,
+    json_len: usize,
+    out_buf: *[*]u8,
+    out_len: *usize,
+) callconv(.c) i32 {
+    const json_slice = json_buf[0..json_len];
+    const result = json_serde.jsonToArchive(page_allocator, json_slice) catch |e| {
+        return jsonSerdeErrorCode(e);
+    };
+    out_buf.* = result.ptr;
+    out_len.* = result.len;
+    return 0;
+}
+
+// Restored helper for blar_to_json / blar_from_json
+fn jsonSerdeErrorCode(err: json_serde.JsonSerdeError) i32 {
+    return switch (err) {
+        error.OutOfMemory => -13,
+        error.InvalidJson => -18,
+        error.MissingRequiredField => -19,
+        error.InvalidEntryType => -20,
+        error.InvalidTimestamp => -21,
+        error.InvalidMode => -22,
+        error.InvalidContainerType => -1,
+        error.InvalidLength => -2,
+        error.LengthExceedsBounds => -3,
+        error.MissingRequiredKey => -4,
+        error.DuplicateKey => -5,
+        error.KeysNotSorted => -6,
+        error.HashMismatch => -7,
+        error.IndexOutOfBounds => -8,
+        error.InvalidMagic => -9,
+        error.BufferTooSmall => -10,
+        error.UnexpectedEndOfInput => -11,
+        error.Overflow => -12,
+        error.MissingSigil => -25,
+        error.InvalidSigilOrder => -26,
+        error.MissingDecompLen => -27,
+    };
+}
+
+export fn blar_is_compressed(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
+    return compression_mod.isCompressed(buf[0..buf_len]);
+}
+

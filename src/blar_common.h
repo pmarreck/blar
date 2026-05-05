@@ -185,13 +185,13 @@ static uint8_t *read_archive_plain(const char *path, size_t *out_len) {
     uint8_t *buf = read_file(path, out_len);
     if (!buf) return NULL;
 
-    if (blip_is_encrypted(buf, *out_len)) {
+    if (blar_is_encrypted(buf, *out_len)) {
         fprintf(stderr, "Encrypted archives not supported by miniblar (use blar)\n");
         free(buf);
         return NULL;
     }
 
-    if (blip_is_compressed(buf, *out_len)) {
+    if (blar_is_compressed(buf, *out_len)) {
         fprintf(stderr, "Compressed archives not supported by miniblar (use blar)\n");
         free(buf);
         return NULL;
@@ -282,7 +282,7 @@ static bool maybe_reassemble_segments(uint8_t **bufp, size_t *lenp, const char *
     free(segs);
 
     if (rc != BLIP_OK) {
-        fprintf(stderr, "Segment reassembly failed: %s\n", blip_error_string(rc));
+        fprintf(stderr, "Segment reassembly failed: %s\n", blar_error_string(rc));
         return false;
     }
 
@@ -313,7 +313,7 @@ static uint8_t *read_archive(const char *path, size_t *out_len) {
     }
 
     /* Check for encrypted LP container (ENC attribute) — outermost layer */
-    if (blip_is_encrypted(buf, *out_len)) {
+    if (blar_is_encrypted(buf, *out_len)) {
         const char *password = get_password();
         if (!password) {
             fprintf(stderr, "Password required for encrypted archive\n");
@@ -322,7 +322,7 @@ static uint8_t *read_archive(const char *path, size_t *out_len) {
         }
         uint8_t *decrypted = NULL;
         size_t dec_len = 0;
-        int32_t rc = blip_decrypt_container(buf, *out_len,
+        int32_t rc = blar_decrypt_container(buf, *out_len,
                                              password, strlen(password),
                                              &decrypted, &dec_len);
         free(buf);
@@ -330,7 +330,7 @@ static uint8_t *read_archive(const char *path, size_t *out_len) {
             if (rc == BLIP_ERR_AUTH_FAILED)
                 fprintf(stderr, "Wrong password or corrupted archive\n");
             else
-                fprintf(stderr, "Decryption failed: %s\n", blip_error_string(rc));
+                fprintf(stderr, "Decryption failed: %s\n", blar_error_string(rc));
             return NULL;
         }
         /* Copy into malloc'd buffer so caller can free() uniformly */
@@ -345,13 +345,13 @@ static uint8_t *read_archive(const char *path, size_t *out_len) {
     }
 
     /* Check for compressed LP container (COMP attribute) — inner layer */
-    if (blip_is_compressed(buf, *out_len)) {
+    if (blar_is_compressed(buf, *out_len)) {
         uint8_t *decompressed = NULL;
         size_t decomp_len = 0;
-        int32_t rc = blip_decompress_container(buf, *out_len, &decompressed, &decomp_len);
+        int32_t rc = blar_decompress_container(buf, *out_len, &decompressed, &decomp_len);
         free(buf);
         if (rc != BLIP_OK) {
-            fprintf(stderr, "Failed to decompress archive: %s\n", blip_error_string(rc));
+            fprintf(stderr, "Failed to decompress archive: %s\n", blar_error_string(rc));
             return NULL;
         }
         /* Copy into malloc'd buffer so caller can free() uniformly */
@@ -952,7 +952,7 @@ static int cmd_peek_common(const char *prog, int argc, char **argv) {
     return (rc == 0) ? EXIT_OK : EXIT_IO;
 }
 
-/* ── Poke: thin C wrapper calling Zig core via blip_poke ──────────────── */
+/* ── Poke: thin C wrapper calling Zig core via blar_poke ──────────────── */
 
 static void poke_usage(FILE *out, const char *prog) {
     fprintf(out,
@@ -1122,10 +1122,10 @@ static int cmd_poke_common(const char *prog, int argc, char **argv) {
         free_new_value = true;
     }
 
-    /* Call blip_poke */
+    /* Call blar_poke */
     uint8_t *out_buf = NULL;
     size_t out_len = 0;
-    int32_t rc = blip_poke(buf, buf_len,
+    int32_t rc = blar_poke(buf, buf_len,
                            path_expr, strlen(path_expr),
                            new_value, new_value_len,
                            &out_buf, &out_len);
@@ -1134,7 +1134,7 @@ static int cmd_poke_common(const char *prog, int argc, char **argv) {
     free(buf);
 
     if (rc != BLIP_OK) {
-        fprintf(stderr, "%s: poke: %s\n", prog, blip_error_string(rc));
+        fprintf(stderr, "%s: poke: %s\n", prog, blar_error_string(rc));
         return EXIT_IO;
     }
 
@@ -1209,11 +1209,11 @@ static int cmd_to_json_common(const char *prog, int argc, char **argv) {
 
     uint8_t *json_buf = NULL;
     size_t json_len = 0;
-    int32_t rc = blip_to_json(buf, buf_len, &json_buf, &json_len);
+    int32_t rc = blar_to_json(buf, buf_len, &json_buf, &json_len);
     free(buf);
 
     if (rc != BLIP_OK) {
-        fprintf(stderr, "%s: to-json: %s\n", prog, blip_error_string(rc));
+        fprintf(stderr, "%s: to-json: %s\n", prog, blar_error_string(rc));
         return EXIT_IO;
     }
 
@@ -1360,11 +1360,11 @@ static int cmd_from_json_common(const char *prog, int argc, char **argv) {
     /* Convert JSON to archive */
     uint8_t *archive_buf = NULL;
     size_t archive_len = 0;
-    int32_t rc = blip_from_json(json_buf, json_len, &archive_buf, &archive_len);
+    int32_t rc = blar_from_json(json_buf, json_len, &archive_buf, &archive_len);
     free(json_buf);
 
     if (rc != BLIP_OK) {
-        fprintf(stderr, "%s: from-json: %s\n", prog, blip_error_string(rc));
+        fprintf(stderr, "%s: from-json: %s\n", prog, blar_error_string(rc));
         return EXIT_IO;
     }
 
@@ -1372,13 +1372,13 @@ static int cmd_from_json_common(const char *prog, int argc, char **argv) {
     if (compress_algo != 0) {
         uint8_t *compressed_buf = NULL;
         size_t compressed_len = 0;
-        rc = blip_compress_container(archive_buf, archive_len, compress_algo, 0,
+        rc = blar_compress_container(archive_buf, archive_len, compress_algo, 0,
                                       NULL, NULL, NULL,
                                       &compressed_buf, &compressed_len);
         blip_free(archive_buf, archive_len);
         if (rc != BLIP_OK) {
             fprintf(stderr, "%s: from-json: compression failed: %s\n",
-                    prog, blip_error_string(rc));
+                    prog, blar_error_string(rc));
             return EXIT_IO;
         }
         archive_buf = compressed_buf;
@@ -1393,14 +1393,14 @@ static int cmd_from_json_common(const char *prog, int argc, char **argv) {
         } else {
             uint8_t *encrypted_buf = NULL;
             size_t encrypted_len = 0;
-            rc = blip_encrypt_container(archive_buf, archive_len,
+            rc = blar_encrypt_container(archive_buf, archive_len,
                                          password, strlen(password),
                                          enc_id, kdf_id,
                                          &encrypted_buf, &encrypted_len);
             blip_free(archive_buf, archive_len);
             if (rc != BLIP_OK) {
                 fprintf(stderr, "%s: from-json: encryption failed: %s\n",
-                        prog, blip_error_string(rc));
+                        prog, blar_error_string(rc));
                 return EXIT_IO;
             }
             archive_buf = encrypted_buf;
@@ -1518,7 +1518,7 @@ static int blar_extract_to_dir(
     uint64_t count = 0;
     int32_t rc = blar_file_count(buf, buf_len, &count);
     if (rc != BLIP_OK) {
-        EXTRACT_LOG("extract: %s", blip_error_string(rc));
+        EXTRACT_LOG("extract: %s", blar_error_string(rc));
         return EXIT_IO;
     }
 
@@ -1541,7 +1541,7 @@ static int blar_extract_to_dir(
         rc = blar_file_path(buf, buf_len, i, &path, &path_len);
         if (rc != BLIP_OK) {
             EXTRACT_LOG("extract: entry %llu: %s",
-                    (unsigned long long)i, blip_error_string(rc));
+                    (unsigned long long)i, blar_error_string(rc));
             free(container_indices);
             return EXIT_IO;
         }
@@ -1658,7 +1658,7 @@ static int blar_extract_to_dir(
             size_t data_len = 0;
             if (blar_file_content(buf, buf_len, i, &data, &data_len) == BLIP_OK) {
                 total_bytes += data_len;
-                blip_free_content(data, data_len);
+                blar_free_content(data, data_len);
             }
             file_entries++;
         }
@@ -1700,7 +1700,7 @@ static int blar_extract_to_dir(
         rc = blar_file_path(buf, buf_len, i, &path, &path_len);
         if (rc != BLIP_OK) {
             EXTRACT_LOG("\033[31mERROR: entry %llu: cannot read path: %s\033[0m",
-                    (unsigned long long)i, blip_error_string(rc));
+                    (unsigned long long)i, blar_error_string(rc));
             failed++;
             continue;
         }
@@ -1710,7 +1710,7 @@ static int blar_extract_to_dir(
         rc = blar_file_content(buf, buf_len, i, &data, &data_len);
         if (rc != BLIP_OK) {
             EXTRACT_LOG("\033[31mERROR: skipping '%.*s': %s\033[0m",
-                    (int)path_len, path, blip_error_string(rc));
+                    (int)path_len, path, blar_error_string(rc));
             failed++;
             continue;
         }
@@ -1722,7 +1722,7 @@ static int blar_extract_to_dir(
             if (n < 0 || (size_t)n >= sizeof(out_path)) {
                 EXTRACT_LOG("\033[31mERROR: skipping '%.*s': path too long\033[0m",
                         (int)path_len, path);
-                blip_free_content(data, data_len);
+                blar_free_content(data, data_len);
                 failed++;
                 continue;
             }
@@ -1730,7 +1730,7 @@ static int blar_extract_to_dir(
             if (path_len >= sizeof(out_path)) {
                 EXTRACT_LOG("\033[31mERROR: skipping '%.*s': path too long\033[0m",
                         (int)path_len, path);
-                blip_free_content(data, data_len);
+                blar_free_content(data, data_len);
                 failed++;
                 continue;
             }
@@ -1742,7 +1742,7 @@ static int blar_extract_to_dir(
         if (!ensure_parent_dir(out_path)) {
             EXTRACT_LOG("\033[31mERROR: skipping '%.*s': cannot create directory: %s\033[0m",
                     (int)path_len, path, strerror(errno));
-            blip_free_content(data, data_len);
+            blar_free_content(data, data_len);
             failed++;
             continue;
         }
@@ -1750,12 +1750,12 @@ static int blar_extract_to_dir(
         if (!write_file(out_path, data, data_len)) {
             EXTRACT_LOG("\033[31mERROR: skipping '%.*s': cannot write: %s\033[0m",
                     (int)path_len, path, strerror(errno));
-            blip_free_content(data, data_len);
+            blar_free_content(data, data_len);
             failed++;
             continue;
         }
 
-        blip_free_content(data, data_len);
+        blar_free_content(data, data_len);
 
         /* Restore file mode and mtime */
         uint16_t mode = 0;
@@ -1806,7 +1806,7 @@ static int blar_extract_to_dir(
         rc = blar_file_path(buf, buf_len, co_idx, &co_path, &co_path_len);
         if (rc != BLIP_OK) {
             EXTRACT_LOG("\033[31mERROR: container %llu: cannot read path: %s\033[0m",
-                    (unsigned long long)co_idx, blip_error_string(rc));
+                    (unsigned long long)co_idx, blar_error_string(rc));
             failed++;
             continue;
         }
@@ -1932,7 +1932,7 @@ static int blar_extract_to_dir(
 
                 /* Free child content */
                 for (size_t ci = 0; ci < child_n; ci++)
-                    blip_free_content(child_data_ptrs[ci], child_content_lens_arr[ci]);
+                    blar_free_content(child_data_ptrs[ci], child_content_lens_arr[ci]);
                 free(child_paths_arr); free(child_path_lens_arr);
                 free(child_contents_arr); free(child_content_lens_arr); free(child_data_ptrs);
                 free(child_pdf_offs); free(child_pdf_lens); free(child_zip_comps);
@@ -2012,12 +2012,12 @@ static int blar_extract_to_dir(
             /* Copy shell to mutable malloc'd buffer */
             uint8_t *pdf_buf = malloc(shell_len);
             if (!pdf_buf) {
-                blip_free_content(shell_data, shell_len);
+                blar_free_content(shell_data, shell_len);
                 failed++;
                 continue;
             }
             memcpy(pdf_buf, shell_data, shell_len);
-            blip_free_content(shell_data, shell_len);
+            blar_free_content(shell_data, shell_len);
 
             /* For each __img_*.jxl child: decode and splice back into shell */
             bool pdf_ok = true;
@@ -2072,7 +2072,7 @@ static int blar_extract_to_dir(
                 rc = blar_file_content(buf, buf_len, j, &jxl_data, &jxl_len);
                 if (rc != BLIP_OK) {
                     EXTRACT_LOG("\033[31mERROR: PDF container '%.*s': cannot read '%.*s': %s\033[0m",
-                            (int)co_path_len, co_path, (int)inner_len, inner, blip_error_string(rc));
+                            (int)co_path_len, co_path, (int)inner_len, inner, blar_error_string(rc));
                     pdf_ok = false;
                     break;
                 }
@@ -2084,7 +2084,7 @@ static int blar_extract_to_dir(
                     uint32_t px_w = 0, px_h = 0, px_ch = 0, px_bps = 0;
                     rc = blar_jxl_to_pixels(jxl_data, jxl_len, &pixels, &pixels_len,
                                             &px_w, &px_h, &px_ch, &px_bps);
-                    blip_free_content(jxl_data, jxl_len);
+                    blar_free_content(jxl_data, jxl_len);
                     if (rc != BLIP_OK) {
                         EXTRACT_LOG("\033[31mERROR: PDF container '%.*s': JXL pixel decode failed for '%.*s'\033[0m",
                                 (int)co_path_len, co_path, (int)inner_len, inner);
@@ -2151,7 +2151,7 @@ static int blar_extract_to_dir(
                     uint8_t *jpeg_data = NULL;
                     size_t jpeg_len = 0;
                     rc = blar_jxl_to_jpeg(jxl_data, jxl_len, &jpeg_data, &jpeg_len);
-                    blip_free_content(jxl_data, jxl_len);
+                    blar_free_content(jxl_data, jxl_len);
                     if (rc != BLIP_OK) {
                         EXTRACT_LOG("\033[31mERROR: PDF container '%.*s': JXL decode failed for '%.*s'\033[0m",
                                 (int)co_path_len, co_path, (int)inner_len, inner);
@@ -2725,7 +2725,7 @@ static bool collect_entries_metadata_recurse(const char *path, entry_list_t *el)
 
     const char *norm = NULL;
     size_t norm_len = 0;
-    blip_normalize_path(path, strlen(path), &norm, &norm_len);
+    blar_normalize_path(path, strlen(path), &norm, &norm_len);
     if (norm_len == 0) {
         return collect_metadata_dir_children(path, el);
     }
@@ -2837,7 +2837,7 @@ static bool collect_entries_recurse(const char *path, entry_list_t *el) {
 
     const char *norm = NULL;
     size_t norm_len = 0;
-    blip_normalize_path(path, strlen(path), &norm, &norm_len);
+    blar_normalize_path(path, strlen(path), &norm, &norm_len);
     if (norm_len == 0) {
         /* Root "." — skip entry but recurse */
         if (S_ISDIR(st.st_mode)) return collect_dir_children(path, el);

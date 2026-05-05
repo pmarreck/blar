@@ -1549,7 +1549,7 @@ test "microbench: serializeFileEntry 4KB" {
     if (builtin.mode == .Debug) return;
 
     const alloc = testing.allocator;
-    const mini = @import("mini_blar.zig");
+    const mini = @import("archive.zig");
 
     const content = "The quick brown fox jumps over the lazy dog. " ** 90; // ~4KB
     const file = mini.FileEntry{

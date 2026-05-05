@@ -1,8 +1,8 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const ct = @import("container_types.zig");
-const container = @import("container.zig");
-const csum_mod = @import("checksum.zig");
+const ct = @import("blip").container_types;
+const container = @import("blip").container_mod;
+const csum_mod = @import("blip").checksum_mod;
 const z7z = @import("z7z");
 const bzip2z = @import("bzip2z");
 const lz4 = @cImport({
@@ -431,7 +431,7 @@ test "zstd compress/decompress round-trip (raw bytes)" {
 
 test "bzip2 compressContainer/decompressContainer round-trip" {
     const allocator = testing.allocator;
-    const leaf = @import("leaf.zig");
+    const leaf = @import("blip").leaf_mod;
 
     const inner = try leaf.serializeData(allocator, "Hello, bzip2 container!");
     defer allocator.free(inner);
@@ -447,7 +447,7 @@ test "bzip2 compressContainer/decompressContainer round-trip" {
 
 test "LZ4 compressContainer/decompressContainer round-trip" {
     const allocator = testing.allocator;
-    const leaf = @import("leaf.zig");
+    const leaf = @import("blip").leaf_mod;
 
     const inner = try leaf.serializeData(allocator, "Hello, LZ4 container!");
     defer allocator.free(inner);
@@ -463,7 +463,7 @@ test "LZ4 compressContainer/decompressContainer round-trip" {
 
 test "zstd compressContainer/decompressContainer round-trip" {
     const allocator = testing.allocator;
-    const leaf = @import("leaf.zig");
+    const leaf = @import("blip").leaf_mod;
 
     const inner = try leaf.serializeData(allocator, "Hello, zstd container!");
     defer allocator.free(inner);
@@ -479,7 +479,7 @@ test "zstd compressContainer/decompressContainer round-trip" {
 
 test "compressContainer/decompressContainer round-trip with LZMA2" {
     const allocator = testing.allocator;
-    const leaf = @import("leaf.zig");
+    const leaf = @import("blip").leaf_mod;
 
     const inner = try leaf.serializeData(allocator, "Hello, unified compression!");
     defer allocator.free(inner);
@@ -495,7 +495,7 @@ test "compressContainer/decompressContainer round-trip with LZMA2" {
 
 test "isCompressed returns true for compressed container" {
     const allocator = testing.allocator;
-    const leaf = @import("leaf.zig");
+    const leaf = @import("blip").leaf_mod;
 
     const inner = try leaf.serializeData(allocator, "test");
     defer allocator.free(inner);
@@ -508,7 +508,7 @@ test "isCompressed returns true for compressed container" {
 
 test "isCompressed returns false for plain container" {
     const allocator = testing.allocator;
-    const leaf = @import("leaf.zig");
+    const leaf = @import("blip").leaf_mod;
 
     const plain = try leaf.serializeData(allocator, "test");
     defer allocator.free(plain);
@@ -518,7 +518,7 @@ test "isCompressed returns false for plain container" {
 
 test "decompressContainer verifies checksum and rejects corruption" {
     const allocator = testing.allocator;
-    const leaf = @import("leaf.zig");
+    const leaf = @import("blip").leaf_mod;
 
     const inner = try leaf.serializeData(allocator, "integrity check");
     defer allocator.free(inner);
@@ -534,7 +534,7 @@ test "decompressContainer verifies checksum and rejects corruption" {
 
 test "decompressContainer rejects non-compressed container" {
     const allocator = testing.allocator;
-    const leaf = @import("leaf.zig");
+    const leaf = @import("blip").leaf_mod;
 
     const plain = try leaf.serializeData(allocator, "not compressed");
     defer allocator.free(plain);
@@ -544,7 +544,7 @@ test "decompressContainer rejects non-compressed container" {
 
 test "compressContainer LP attributes are correct" {
     const allocator = testing.allocator;
-    const leaf = @import("leaf.zig");
+    const leaf = @import("blip").leaf_mod;
 
     const inner = try leaf.serializeData(allocator, "attribute verification");
     defer allocator.free(inner);

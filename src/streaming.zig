@@ -8,12 +8,12 @@
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const mini_blar = @import("mini_blar.zig");
-const array_mod = @import("array.zig");
-const leaf = @import("leaf.zig");
-const container = @import("container.zig");
-const ct = @import("container_types.zig");
-const csum_mod = @import("checksum.zig");
+const mini_blar = @import("archive.zig");
+const array_mod = @import("blip").array_mod;
+const leaf = @import("blip").leaf_mod;
+const container = @import("blip").container_mod;
+const ct = @import("blip").container_types;
+const csum_mod = @import("blip").checksum_mod;
 const expansion = @import("expansion.zig");
 
 const FileEntry = mini_blar.FileEntry;

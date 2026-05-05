@@ -1,9 +1,13 @@
 .{
-    .name = .blip,
-    .fingerprint = 0x159c7302186ec3ad,
-    .version = "0.1.0",
+    .name = .blar,
+    .fingerprint = 0x334b9826ed2b78dc,
+    .version = "3.0.0",
     .minimum_zig_version = "0.15.0",
     .dependencies = .{
+        .blip = .{
+            .url = "https://github.com/pmarreck/BLIP/archive/refs/tags/v3.0.0.tar.gz",
+            .hash = "blip-0.1.0-rcNuGMWVBwAGTmRR3xaTb33jnAIVxcD6zlXlDZ99YPy5",
+        },
         .z7z = .{
             .url = "https://github.com/pmarreck/z7z/archive/d839d9fd18bedf7749f86c4cadaaada5dbc1f723.tar.gz",
             .hash = "z7z-0.1.0-rkKuFwmuBgCU6yaAXj2eBMpGJme0nxUbD7MpLsMJvUs8",

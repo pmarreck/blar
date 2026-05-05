@@ -5,8 +5,8 @@
 /// lz4, or zstd dependencies.
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const ct = @import("container_types.zig");
-const container = @import("container.zig");
+const ct = @import("blip").container_types;
+const container = @import("blip").container_mod;
 
 const ContainerError = container.ContainerError;
 
@@ -83,7 +83,7 @@ test "compression stub: decompressContainer returns UnsupportedCompression" {
 }
 
 test "compression stub: isCompressed returns false for plain data" {
-    const leaf = @import("leaf.zig");
+    const leaf = @import("blip").leaf_mod;
     const plain = try leaf.serializeData(testing.allocator, "hello");
     defer testing.allocator.free(plain);
     try testing.expect(!isCompressed(plain));

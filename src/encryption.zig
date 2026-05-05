@@ -1,8 +1,8 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const ct = @import("container_types.zig");
-const container = @import("container.zig");
-const csum_mod = @import("checksum.zig");
+const ct = @import("blip").container_types;
+const container = @import("blip").container_mod;
+const csum_mod = @import("blip").checksum_mod;
 const testing = std.testing;
 
 const ContainerError = container.ContainerError;
@@ -219,7 +219,7 @@ test "wrong password returns AuthenticationFailed" {
 
 test "encryptContainer/decryptContainer round-trip" {
     const allocator = testing.allocator;
-    const leaf = @import("leaf.zig");
+    const leaf = @import("blip").leaf_mod;
 
     // Create a simple DATA container
     const data_bytes = try leaf.serializeData(allocator, "hello encrypted world");
@@ -243,7 +243,7 @@ test "encryptContainer/decryptContainer round-trip" {
 
 test "encryptContainer with PBKDF2 and ChaCha20" {
     const allocator = testing.allocator;
-    const leaf = @import("leaf.zig");
+    const leaf = @import("blip").leaf_mod;
 
     const data_bytes = try leaf.serializeData(allocator, "pbkdf2 test");
     defer allocator.free(data_bytes);
@@ -259,7 +259,7 @@ test "encryptContainer with PBKDF2 and ChaCha20" {
 
 test "isEncrypted detects encrypted containers" {
     const allocator = testing.allocator;
-    const leaf = @import("leaf.zig");
+    const leaf = @import("blip").leaf_mod;
 
     const plain = try leaf.serializeData(allocator, "plain");
     defer allocator.free(plain);

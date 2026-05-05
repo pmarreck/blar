@@ -1,5 +1,5 @@
 {
-  description = "BLIP: Byte Length Integer Prefix encoding";
+  description = "blar: BLAR archive format and tool, built on BLIP";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -10,11 +10,11 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        pname = "blip";
-        version = "0.2.0";
+        pname = "blar";
+        version = "3.0.0";
         isDarwin = pkgs.stdenv.isDarwin;
 
-        zigDepsHash = "sha256-+eu0L3pehap4NzTz3i8ftauwghIM0dUeKR5QJtBVVVk=";
+        zigDepsHash = "sha256-8QduzbXIF/lzcjCcNO4msxkgIugo93pcjWkHQl6yXtU=";
 
         zigDeps = pkgs.stdenv.mkDerivation {
           pname = "${pname}-zig-deps";

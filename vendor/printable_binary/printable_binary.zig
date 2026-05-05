@@ -572,13 +572,6 @@ pub fn detectDoubleEncode(input: []const u8, threshold: f32) DoubleEncodeInfo {
         .confidence = confidence,
     };
 }
-
-/// C ABI export for double-encoding detection
-export fn pb_detect_double_encode(input: [*]const u8, input_len: usize, threshold: f32) callconv(.c) DoubleEncodeInfo {
-    const slice = if (input_len > 0) input[0..input_len] else &[_]u8{};
-    return detectDoubleEncode(slice, threshold);
-}
-
 /// Get UTF-8 sequence length from first byte
 pub fn utf8SeqLen(first_byte: u8) u3 {
     if (first_byte < 0x80) return 1;
@@ -1111,20 +1104,6 @@ pub fn validate(input: []const u8, ws_flags: c_uint) ValidationResult {
         .error_codepoint = 0,
     };
 }
-
-/// C ABI export for validation function
-export fn pb_validate(input: [*]const u8, input_len: usize, ws_flags: c_uint) callconv(.c) ValidationResult {
-    const slice = if (input_len > 0) input[0..input_len] else &[_]u8{};
-    return validate(slice, ws_flags);
-}
-
-/// C ABI export for range resolution function
-export fn pb_apply_range(input_len: usize, has_start: c_int, start: i64, has_end: c_int, end: i64) callconv(.c) RangeResult {
-    const opt_start: ?i64 = if (has_start != 0) start else null;
-    const opt_end: ?i64 = if (has_end != 0) end else null;
-    return applyRange(input_len, opt_start, opt_end);
-}
-
 // =============================================================================
 // FFI Encode/Decode/Format API
 // =============================================================================
@@ -1155,110 +1134,6 @@ pub const FFIResult = extern struct {
 
 // Use page allocator for FFI - simple and doesn't require libc
 const ffi_allocator = std.heap.page_allocator;
-
-/// Free memory allocated by pb_encode, pb_decode, or pb_format
-export fn pb_free(ptr: ?[*]u8, len: usize) callconv(.c) void {
-    if (ptr) |p| {
-        ffi_allocator.free(p[0..len]);
-    }
-}
-
-/// C ABI export for encode function
-/// Caller must call pb_free() on result.data when done
-export fn pb_encode(
-    input: [*]const u8,
-    input_len: usize,
-    flags: c_uint,
-    preserve_chars: ?[*]const u8,
-    preserve_chars_len: usize,
-) callconv(.c) FFIResult {
-    const input_slice = if (input_len > 0) input[0..input_len] else &[_]u8{};
-    const preserve_slice = if (preserve_chars != null and preserve_chars_len > 0)
-        preserve_chars.?[0..preserve_chars_len]
-    else
-        &[_]u8{};
-
-    const options = EncodeOptions{
-        .spaces = (flags & @intFromEnum(EncodeFlags.preserve_spaces)) != 0,
-        .tabs = (flags & @intFromEnum(EncodeFlags.preserve_tabs)) != 0,
-        .crlf = (flags & @intFromEnum(EncodeFlags.preserve_crlf)) != 0,
-        .preserve_chars = preserve_slice,
-    };
-
-    const result = encode(ffi_allocator, input_slice, options) catch {
-        return FFIResult{ .data = null, .len = 0, .error_code = 1 };
-    };
-
-    return FFIResult{
-        .data = result.ptr,
-        .len = result.len,
-        .error_code = 0,
-    };
-}
-
-/// C ABI export for decode function
-/// Caller must call pb_free() on result.data when done
-export fn pb_decode(
-    input: [*]const u8,
-    input_len: usize,
-    flags: c_uint,
-) callconv(.c) FFIResult {
-    const input_slice = if (input_len > 0) input[0..input_len] else &[_]u8{};
-
-    const options = DecodeOptions{
-        .spaces = (flags & @intFromEnum(DecodeFlags.spaces_mode)) != 0,
-        .strip_whitespace = (flags & @intFromEnum(DecodeFlags.strip_whitespace)) != 0,
-    };
-
-    const result = decode(ffi_allocator, input_slice, options) catch {
-        return FFIResult{ .data = null, .len = 0, .error_code = 1 };
-    };
-
-    return FFIResult{
-        .data = result.ptr,
-        .len = result.len,
-        .error_code = 0,
-    };
-}
-
-/// C ABI export for format function
-/// Caller must call pb_free() on result.data when done
-export fn pb_format(
-    input: [*]const u8,
-    input_len: usize,
-    group_size: usize,
-    groups_per_line: usize,
-    use_tabs: c_int,
-) callconv(.c) FFIResult {
-    const input_slice = if (input_len > 0) input[0..input_len] else &[_]u8{};
-
-    const options = FormatOptions{
-        .group_size = if (group_size > 0) group_size else 8,
-        .groups_per_line = if (groups_per_line > 0) groups_per_line else 10,
-        .use_tabs = use_tabs != 0,
-    };
-
-    const result = format(ffi_allocator, input_slice, options) catch {
-        return FFIResult{ .data = null, .len = 0, .error_code = 1 };
-    };
-
-    return FFIResult{
-        .data = result.ptr,
-        .len = result.len,
-        .error_code = 0,
-    };
-}
-
-/// Get the mapping for a byte value (returns pointer to static data, do not free)
-export fn pb_get_mapping(byte: u8) callconv(.c) [*]const u8 {
-    return character_map[byte].ptr;
-}
-
-/// Get the length of a mapping for a byte value
-export fn pb_get_mapping_len(byte: u8) callconv(.c) usize {
-    return character_map[byte].len;
-}
-
 // =============================================================================
 // Unit Tests
 // =============================================================================

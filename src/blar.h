@@ -79,7 +79,11 @@ bool blar_verify(const uint8_t *buf, size_t buf_len);
 void blip_free(uint8_t *ptr, size_t len);
 
 /* Get a human-readable error string for an error code. */
-const char *blip_error_string(int32_t error_code);
+/* Get a human-readable error string. blar-specific codes (-33+) handled
+ * locally; BLIP-side codes fall through to blar_error_string in libblip.a. */
+const char *blar_error_string(int32_t error_code);
+
+/* BLIP-side error_string is provided by the BLIP dep (#include <blip.h>). */
 
 /* Get file path from archive by index (zero-copy pointer into buf). */
 int32_t blar_file_path(const uint8_t *buf, size_t buf_len,
@@ -88,20 +92,20 @@ int32_t blar_file_path(const uint8_t *buf, size_t buf_len,
 
 /* Get file content from archive by index.
  * Handles per-file compression transparently (decompresses if needed).
- * Caller must free the returned buffer with blip_free_content(). */
+ * Caller must free the returned buffer with blar_free_content(). */
 int32_t blar_file_content(const uint8_t *buf, size_t buf_len,
                                    uint64_t index,
                                    uint8_t **out_data, size_t *out_data_len);
 
 /* Get file content by path.
  * Handles per-file compression transparently (decompresses if needed).
- * Caller must free the returned buffer with blip_free_content(). */
+ * Caller must free the returned buffer with blar_free_content(). */
 int32_t blar_file_content_by_path(const uint8_t *buf, size_t buf_len,
                                            const char *path, size_t path_len,
                                            uint8_t **out_data, size_t *out_data_len);
 
 /* Free content returned by blar_file_content or blar_file_content_by_path. */
-void blip_free_content(uint8_t *data, size_t len);
+void blar_free_content(uint8_t *data, size_t len);
 
 /* Verify a single file's xh64 hash within archive.
  * For DIR entries, verifies the container hash only (no bina check). */
@@ -189,7 +193,7 @@ typedef void (*blar_phase_fn)(const uint8_t *label, size_t label_len,
 /* Create a full BLIP archive with FILE + DIR entries and metadata.
  * per_file_comp_algo: 0=none, BLIP_COMP_LZMA2/BZIP2/LZ4/ZSTD for per-file compression.
  *   When non-zero, each file's DATA is individually compressed; outer archive is NOT compressed.
- *   For solid compression, pass 0 here and call blip_compress_container() on the result.
+ *   For solid compression, pass 0 here and call blar_compress_container() on the result.
  * progress_fn: optional callback for per-entry progress (NULL to skip).
  * phase_fn: optional callback for phase transitions (NULL to skip).
  * progress_ctx: shared user context for both callbacks.
@@ -240,7 +244,7 @@ void blar_free_xattrs(blar_xattr_entry *xattrs, size_t count,
 /* Normalize a path by stripping leading "./" and "/" sequences (tar-style).
  * Returns a pointer into the original path buffer (zero-copy).
  * See normalizePath() in lib.zig for full documentation and examples. */
-void blip_normalize_path(const char *path, size_t path_len,
+void blar_normalize_path(const char *path, size_t path_len,
                          const char **out_path, size_t *out_path_len);
 
 /* --- Peek / navigation API --- */
@@ -293,7 +297,7 @@ int32_t blip_peek_display(const uint8_t *buf, size_t buf_len,
 #define BLIP_ERR_IMMUTABLE       -16
 #define BLIP_ERR_NOT_A_LEAF      -17
 
-int32_t blip_poke(const uint8_t *buf, size_t buf_len,
+int32_t blar_poke(const uint8_t *buf, size_t buf_len,
                   const char *path, size_t path_len,
                   const uint8_t *new_value, size_t new_value_len,
                   uint8_t **out_buf, size_t *out_len);
@@ -313,13 +317,13 @@ int32_t blip_decode_printable_binary(const uint8_t *encoded, size_t encoded_len,
 /* Convert a BLIP archive to JSON.
  * Returns 0 on success, negative error code on failure.
  * Caller must free output buffer with blip_free(). */
-int32_t blip_to_json(const uint8_t *buf, size_t buf_len,
+int32_t blar_to_json(const uint8_t *buf, size_t buf_len,
                      uint8_t **out_buf, size_t *out_len);
 
 /* Convert JSON to a BLIP archive.
  * Returns 0 on success, negative error code on failure.
  * Caller must free output buffer with blip_free(). */
-int32_t blip_from_json(const uint8_t *json_buf, size_t json_len,
+int32_t blar_from_json(const uint8_t *json_buf, size_t json_len,
                        uint8_t **out_buf, size_t *out_len);
 
 /* --- Compression --- */
@@ -355,7 +359,7 @@ int32_t blip_from_json(const uint8_t *json_buf, size_t json_len,
 #define BLIP_ERR_JXL_DECODE        -39
 
 /* Check if a buffer is a compressed LP container (has COMP attribute). */
-bool blip_is_compressed(const uint8_t *buf, size_t buf_len);
+bool blar_is_compressed(const uint8_t *buf, size_t buf_len);
 
 /* Compress a BLIP container with LZMA2.
  * Input: any serialized BLIP container bytes.
@@ -383,7 +387,7 @@ typedef void (*blar_compress_progress_fn)(uint64_t bytes_done, uint64_t bytes_to
  * progress_ctx: shared user context for both callbacks.
  * Returns 0 on success, negative error code on failure.
  * Caller must free output buffer with blip_free(). */
-int32_t blip_compress_container(const uint8_t *buf, size_t buf_len,
+int32_t blar_compress_container(const uint8_t *buf, size_t buf_len,
                                  uint8_t algo_id, uint8_t num_threads,
                                  blar_compress_progress_fn progress_fn,
                                  blar_phase_fn phase_fn,
@@ -395,20 +399,20 @@ int32_t blip_compress_container(const uint8_t *buf, size_t buf_len,
  * Verifies checksum before decompressing.
  * Returns 0 on success, negative error code on failure.
  * Caller must free output buffer with blip_free(). */
-int32_t blip_decompress_container(const uint8_t *buf, size_t buf_len,
+int32_t blar_decompress_container(const uint8_t *buf, size_t buf_len,
                                    uint8_t **out_buf, size_t *out_len);
 
 /* --- Encryption --- */
 
 /* Check if a buffer is an encrypted LP container (has ENC attribute). */
-bool blip_is_encrypted(const uint8_t *buf, size_t buf_len);
+bool blar_is_encrypted(const uint8_t *buf, size_t buf_len);
 
 /* Encrypt a serialized container.
  * enc_id: 1=AES-256-GCM, 2=ChaCha20-Poly1305
  * kdf_id: 1=Argon2id, 2=PBKDF2-SHA256
  * Returns 0 on success, negative error code on failure.
  * Caller must free output buffer with blip_free(). */
-int32_t blip_encrypt_container(const uint8_t *buf, size_t buf_len,
+int32_t blar_encrypt_container(const uint8_t *buf, size_t buf_len,
                                 const char *password, size_t password_len,
                                 uint8_t enc_id, uint8_t kdf_id,
                                 uint8_t **out_buf, size_t *out_len);
@@ -416,7 +420,7 @@ int32_t blip_encrypt_container(const uint8_t *buf, size_t buf_len,
 /* Decrypt an encrypted LP container.
  * Returns 0 on success, negative error code on failure.
  * Caller must free output buffer with blip_free(). */
-int32_t blip_decrypt_container(const uint8_t *buf, size_t buf_len,
+int32_t blar_decrypt_container(const uint8_t *buf, size_t buf_len,
                                 const char *password, size_t password_len,
                                 uint8_t **out_buf, size_t *out_len);
 

@@ -144,8 +144,8 @@ int main(int argc, char **argv) {
             uint8_t magic[8];
             size_t n = fread(magic, 1, sizeof(magic), f);
             fclose(f);
-            if (n >= 5 && (blip_is_compressed(magic, n) ||
-                           blip_is_encrypted(magic, n))) {
+            if (n >= 5 && (blar_is_compressed(magic, n) ||
+                           blar_is_encrypted(magic, n))) {
                 looks_like_blar = true;
             } else if (n >= 5) {
                 /* Check for BLAR/MBAR magic inside the outer ARRAY */
@@ -689,7 +689,7 @@ static int cmd_create(int argc, char **argv) {
 
     if (rc != BLIP_OK) {
         if (progress) { progrez_finish(progress); progrez_destroy(progress); }
-        fprintf(stderr, "blar: create: %s\n", blip_error_string(rc));
+        fprintf(stderr, "blar: create: %s\n", blar_error_string(rc));
         return EXIT_IO;
     }
 
@@ -702,7 +702,7 @@ static int cmd_create(int argc, char **argv) {
         }
         uint8_t *compressed_buf = NULL;
         size_t compressed_len = 0;
-        rc = blip_compress_container(archive_buf, archive_len, compress_algo, num_threads,
+        rc = blar_compress_container(archive_buf, archive_len, compress_algo, num_threads,
                                       progress ? compress_progress_cb : NULL,
                                       progress ? phase_cb : NULL,
                                       progress,
@@ -711,7 +711,7 @@ static int cmd_create(int argc, char **argv) {
         if (rc != BLIP_OK) {
             if (progress) { progrez_finish(progress); progrez_destroy(progress); }
             fprintf(stderr, "blar: create: compression failed: %s\n",
-                    blip_error_string(rc));
+                    blar_error_string(rc));
             return EXIT_IO;
         }
         archive_buf = compressed_buf;
@@ -733,7 +733,7 @@ static int cmd_create(int argc, char **argv) {
         }
         uint8_t *encrypted_buf = NULL;
         size_t encrypted_len = 0;
-        rc = blip_encrypt_container(archive_buf, archive_len,
+        rc = blar_encrypt_container(archive_buf, archive_len,
                                      password, strlen(password),
                                      enc_id, kdf_id,
                                      &encrypted_buf, &encrypted_len);
@@ -741,7 +741,7 @@ static int cmd_create(int argc, char **argv) {
         if (rc != BLIP_OK) {
             if (progress) { progrez_finish(progress); progrez_destroy(progress); }
             fprintf(stderr, "blar: create: encryption failed: %s\n",
-                    blip_error_string(rc));
+                    blar_error_string(rc));
             return EXIT_IO;
         }
         archive_buf = encrypted_buf;
@@ -810,7 +810,7 @@ static int cmd_list(int argc, char **argv) {
     uint64_t count = 0;
     int32_t rc = blar_file_count(buf, buf_len, &count);
     if (rc != BLIP_OK) {
-        fprintf(stderr, "blar: list: %s\n", blip_error_string(rc));
+        fprintf(stderr, "blar: list: %s\n", blar_error_string(rc));
         free(buf);
         return EXIT_IO;
     }
@@ -855,7 +855,7 @@ static int cmd_list(int argc, char **argv) {
         rc = blar_file_path(buf, buf_len, i, &path, &path_len);
         if (rc != BLIP_OK) {
             fprintf(stderr, "blar: list: entry %llu: %s\n",
-                    (unsigned long long)i, blip_error_string(rc));
+                    (unsigned long long)i, blar_error_string(rc));
             free(buf);
             return EXIT_IO;
         }
@@ -1005,7 +1005,7 @@ static int cmd_verify(int argc, char **argv) {
     uint64_t count = 0;
     int32_t rc = blar_file_count(buf, buf_len, &count);
     if (rc != BLIP_OK) {
-        fprintf(stderr, "blar: verify: %s\n", blip_error_string(rc));
+        fprintf(stderr, "blar: verify: %s\n", blar_error_string(rc));
         free(buf);
         return EXIT_VERIFY;
     }
@@ -1023,7 +1023,7 @@ static int cmd_verify(int argc, char **argv) {
             if (path) {
                 fprintf(stderr, " ('%.*s')", (int)path_len, path);
             }
-            fprintf(stderr, ": %s\n", blip_error_string(rc));
+            fprintf(stderr, ": %s\n", blar_error_string(rc));
             free(buf);
             return EXIT_VERIFY;
         }
@@ -1114,7 +1114,7 @@ static int cmd_info(int argc, char **argv) {
     uint64_t count = 0;
     int32_t rc = blar_file_count(buf, buf_len, &count);
     if (rc != BLIP_OK) {
-        fprintf(stderr, "blar: info: %s\n", blip_error_string(rc));
+        fprintf(stderr, "blar: info: %s\n", blar_error_string(rc));
         free(buf);
         return EXIT_IO;
     }
@@ -1148,7 +1148,7 @@ static int cmd_info(int argc, char **argv) {
             rc = blar_file_path(buf, buf_len, i, &path, &path_len);
             if (rc != BLIP_OK) {
                 fprintf(stderr, "blar: info: entry %llu: %s\n",
-                        (unsigned long long)i, blip_error_string(rc));
+                        (unsigned long long)i, blar_error_string(rc));
                 free(buf);
                 return EXIT_IO;
             }
@@ -1175,7 +1175,7 @@ static int cmd_info(int argc, char **argv) {
                 if (rc == BLIP_OK) {
                     printf(", \"size\": %llu", (unsigned long long)data_len);
                     total_content += data_len;
-                    blip_free_content(data, data_len);
+                    blar_free_content(data, data_len);
                 }
             }
 
@@ -1293,7 +1293,7 @@ static int cmd_info(int argc, char **argv) {
         rc = blar_file_path(buf, buf_len, i, &path, &path_len);
         if (rc != BLIP_OK) {
             fprintf(stderr, "blar: info: entry %llu: %s\n",
-                    (unsigned long long)i, blip_error_string(rc));
+                    (unsigned long long)i, blar_error_string(rc));
             free(buf);
             return EXIT_IO;
         }
@@ -1313,7 +1313,7 @@ static int cmd_info(int argc, char **argv) {
             rc = blar_file_content(buf, buf_len, i, &data, &data_len);
             if (rc != BLIP_OK) {
                 fprintf(stderr, "blar: info: entry %llu: %s\n",
-                        (unsigned long long)i, blip_error_string(rc));
+                        (unsigned long long)i, blar_error_string(rc));
                 free(buf);
                 return EXIT_IO;
             }
@@ -1326,7 +1326,7 @@ static int cmd_info(int argc, char **argv) {
             printf("%c %04o  %8llu  %.*s\n", type_char, mode,
                    (unsigned long long)data_len, (int)path_len, path);
             total_content += data_len;
-            blip_free_content(data, data_len);
+            blar_free_content(data, data_len);
         }
     }
 
@@ -1377,7 +1377,7 @@ static int cmd_cat(int argc, char **argv) {
         free(buf);
         return EXIT_VERIFY;
     } else if (rc != BLIP_OK) {
-        fprintf(stderr, "blar: cat: %s\n", blip_error_string(rc));
+        fprintf(stderr, "blar: cat: %s\n", blar_error_string(rc));
         free(buf);
         return EXIT_IO;
     }
@@ -1386,7 +1386,7 @@ static int cmd_cat(int argc, char **argv) {
         fwrite(data, 1, data_len, stdout);
     }
 
-    blip_free_content(data, data_len);
+    blar_free_content(data, data_len);
     free(buf);
     return EXIT_OK;
 }
@@ -1478,7 +1478,7 @@ static int cmd_text(int argc, char **argv) {
     uint64_t count = 0;
     int32_t rc = blar_file_count(buf, buf_len, &count);
     if (rc != BLIP_OK) {
-        fprintf(stderr, "blar: text: %s\n", blip_error_string(rc));
+        fprintf(stderr, "blar: text: %s\n", blar_error_string(rc));
         free(buf);
         return EXIT_IO;
     }
@@ -1512,7 +1512,7 @@ static int cmd_text(int argc, char **argv) {
         rc = blar_file_path(buf, buf_len, i, &path, &path_len);
         if (rc != BLIP_OK) {
             fprintf(stderr, "blar: text: entry %llu: %s\n",
-                    (unsigned long long)i, blip_error_string(rc));
+                    (unsigned long long)i, blar_error_string(rc));
             if (output_path) fclose(out);
             free(dir_paths);
             free(dir_path_lens);
@@ -1639,7 +1639,7 @@ static int cmd_text(int argc, char **argv) {
             rc = blar_file_content(buf, buf_len, i, &data, &data_len);
             if (rc == BLIP_OK && data != NULL && data_len > 0) {
                 text_write_payload(out, data, data_len, depth + 1);
-                blip_free_content(data, data_len);
+                blar_free_content(data, data_len);
             }
         }
     }
@@ -2062,7 +2062,7 @@ static int cmd_from_text(int argc, char **argv) {
                                                &archive_buf, &archive_len);
         if (rc != BLIP_OK) {
             fprintf(stderr, "blar: from-text: archive creation failed: %s\n",
-                    blip_error_string(rc));
+                    blar_error_string(rc));
             ret = EXIT_IO;
             goto cleanup;
         }
@@ -2071,13 +2071,13 @@ static int cmd_from_text(int argc, char **argv) {
         if (compress_algo != 0) {
             uint8_t *compressed_buf = NULL;
             size_t compressed_len = 0;
-            rc = blip_compress_container(archive_buf, archive_len, compress_algo, 0,
+            rc = blar_compress_container(archive_buf, archive_len, compress_algo, 0,
                                           NULL, NULL, NULL,
                                           &compressed_buf, &compressed_len);
             blip_free(archive_buf, archive_len);
             if (rc != BLIP_OK) {
                 fprintf(stderr, "blar: from-text: compression failed: %s\n",
-                        blip_error_string(rc));
+                        blar_error_string(rc));
                 ret = EXIT_IO;
                 goto cleanup;
             }
@@ -2243,7 +2243,7 @@ static int cmd_explode(int argc, char **argv) {
     uint64_t count = 0;
     int32_t rc = blar_file_count(buf, buf_len, &count);
     if (rc != BLIP_OK) {
-        fprintf(stderr, "blar: explode: %s\n", blip_error_string(rc));
+        fprintf(stderr, "blar: explode: %s\n", blar_error_string(rc));
         free(buf);
         return EXIT_IO;
     }
@@ -2272,7 +2272,7 @@ static int cmd_explode(int argc, char **argv) {
         rc = blar_file_path(buf, buf_len, i, &path, &path_len);
         if (rc != BLIP_OK) {
             fprintf(stderr, "blar: explode: entry %llu: %s\n",
-                    (unsigned long long)i, blip_error_string(rc));
+                    (unsigned long long)i, blar_error_string(rc));
             ret = EXIT_IO;
             goto explode_cleanup;
         }
@@ -2309,7 +2309,7 @@ static int cmd_explode(int argc, char **argv) {
             rc = blar_file_content(buf, buf_len, i, &content, &content_len);
             if (rc != BLIP_OK) {
                 fprintf(stderr, "blar: explode: cannot read content of '%.*s': %s\n",
-                        (int)path_len, path, blip_error_string(rc));
+                        (int)path_len, path, blar_error_string(rc));
                 ret = EXIT_IO;
                 goto explode_cleanup;
             }
@@ -2318,7 +2318,7 @@ static int cmd_explode(int argc, char **argv) {
             if (!f) {
                 fprintf(stderr, "blar: explode: cannot write '%s': %s\n",
                         out_path, strerror(errno));
-                blip_free_content(content, content_len);
+                blar_free_content(content, content_len);
                 ret = EXIT_IO;
                 goto explode_cleanup;
             }
@@ -2326,7 +2326,7 @@ static int cmd_explode(int argc, char **argv) {
                 fwrite(content, 1, content_len, f);
             }
             fclose(f);
-            blip_free_content(content, content_len);
+            blar_free_content(content, content_len);
         }
 
         /* Set mode if available */
@@ -2888,7 +2888,7 @@ static int cmd_implode(int argc, char **argv) {
 
     if (rc != BLIP_OK) {
         fprintf(stderr, "blar: implode: archive creation failed: %s\n",
-                blip_error_string(rc));
+                blar_error_string(rc));
         return EXIT_IO;
     }
 
@@ -2896,13 +2896,13 @@ static int cmd_implode(int argc, char **argv) {
     if (do_compress) {
         uint8_t *compressed_buf = NULL;
         size_t compressed_len = 0;
-        rc = blip_compress_container(archive_buf, archive_len, BLIP_COMP_LZMA2, 0,
+        rc = blar_compress_container(archive_buf, archive_len, BLIP_COMP_LZMA2, 0,
                                       NULL, NULL, NULL,
                                       &compressed_buf, &compressed_len);
         blip_free(archive_buf, archive_len);
         if (rc != BLIP_OK) {
             fprintf(stderr, "blar: implode: compression failed: %s\n",
-                    blip_error_string(rc));
+                    blar_error_string(rc));
             return EXIT_IO;
         }
         archive_buf = compressed_buf;
@@ -2980,7 +2980,7 @@ static int write_archive_or_segments(const char *out_path,
                                      /* csum_id   */ 2 /* xxhash64 */,
                                      &segs, &seg_count);
     if (rc != BLIP_OK) {
-        fprintf(stderr, "blar: create: segmentation failed: %s\n", blip_error_string(rc));
+        fprintf(stderr, "blar: create: segmentation failed: %s\n", blar_error_string(rc));
         return EXIT_IO;
     }
 
@@ -3185,7 +3185,7 @@ static int cmd_segment(int argc, char **argv) {
         &segs, &seg_count);
     free(input);
     if (rc != BLIP_OK) {
-        fprintf(stderr, "blar: segment: chunk failed: %s\n", blip_error_string(rc));
+        fprintf(stderr, "blar: segment: chunk failed: %s\n", blar_error_string(rc));
         return EXIT_IO;
     }
 
@@ -3333,7 +3333,7 @@ static int cmd_join(int argc, char **argv) {
     free(segs);
 
     if (rc != BLIP_OK) {
-        fprintf(stderr, "blar: join: reassembly failed: %s\n", blip_error_string(rc));
+        fprintf(stderr, "blar: join: reassembly failed: %s\n", blar_error_string(rc));
         free(parsed_stem);
         return EXIT_IO;
     }

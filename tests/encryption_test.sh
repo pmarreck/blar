@@ -17,8 +17,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 BLAR="$PROJECT_DIR/zig-out/bin/blar"
 
-echo "Building blar..."
-(cd "$PROJECT_DIR" && zig build 2>/dev/null) || { echo "FATAL: build failed"; exit 1; }
+echo "Building..."
+(cd "$PROJECT_DIR" && ./build >/dev/null 2>&1) || { echo "FATAL: build failed"; exit 1; }
 
 # ── Setup ────────────────────────────────────────────────────────────────
 TMPDIR_TEST="$(mktemp -d)"

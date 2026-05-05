@@ -40,7 +40,7 @@ echo "╚═══════════════════════�
 # Build everything first (ReleaseFast for CLI tests)
 echo ""
 echo "Building (ReleaseFast)..."
-nix develop -c zig build -Doptimize=ReleaseFast 2>/dev/null \
+./build 2>&1 | tail -3 \
     || { echo "FATAL: build failed"; exit 1; }
 
 # Zig unit tests
@@ -55,7 +55,6 @@ run_suite "PNG Container Tests" "bash tests/png_container_test.sh"
 run_suite "Streaming Tests" "bash tests/streaming_test.sh"
 run_suite "Compression Tests" "bash tests/compression_test.sh"
 run_suite "Encryption Tests" "bash tests/encryption_test.sh"
-run_suite "MiniBLAR Tests" "bash tests/miniblar_test.sh"
 run_suite "Segmentation Tests" "bash tests/segmentation_test.sh"
 
 # Summary

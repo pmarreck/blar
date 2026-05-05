@@ -50,7 +50,13 @@ extern fn blip_encode_printable_binary(
 /// blar-specific codes are handled here; BLIP-side codes fall through to libblip.a.
 export fn blar_error_string(error_code: i32) callconv(.c) [*:0]const u8 {
     return switch (error_code) {
-        // Archive-specific error codes (ZIP, PDF, JXL, codec expansion).
+        // blar-side encryption/compression error codes.
+        -28 => "authentication failed (wrong password or corrupted data)",
+        -29 => "password required for encrypted container",
+        -30 => "encryption failed",
+        -31 => "decryption failed",
+        -32 => "unsupported compression algorithm",
+        // blar-side ZIP-specific error codes.
         -33 => "invalid zip container",
         -34 => "encrypted zip container",
         -35 => "zip64 not supported",
@@ -2808,14 +2814,14 @@ test "C FFI: blip_free frees allocated memory" {
     blip_free(out_buf, out_len);
 }
 
-test "C FFI: blip_error_string returns correct strings" {
-    const ok_str = std.mem.span(blip_error_string(0));
+test "C FFI: blar_error_string returns correct strings" {
+    const ok_str = std.mem.span(blar_error_string(0));
     try std.testing.expectEqualSlices(u8, "success", ok_str);
 
-    const hash_str = std.mem.span(blip_error_string(-7));
+    const hash_str = std.mem.span(blar_error_string(-7));
     try std.testing.expectEqualSlices(u8, "hash mismatch", hash_str);
 
-    const unknown_str = std.mem.span(blip_error_string(-50));
+    const unknown_str = std.mem.span(blar_error_string(-99));
     try std.testing.expectEqualSlices(u8, "unknown error", unknown_str);
 }
 
@@ -2904,7 +2910,7 @@ test "C FFI: blar_file_verify checks per-file hash" {
 }
 
 test "C FFI: bzip2 compress+decompress multi-block archive" {
-    if (comptime !@import("blip").build_options.enable_compression) return;
+    if (comptime !@import("build_options").enable_compression) return;
     // Regression test: bzip2 multi-block streams (data > ~900KB at level 9)
     // previously caused OutputOverflow on decompression. Fixed in bzip2z f9187bf.
     const size = 950_000; // >900KB to ensure multi-block
@@ -3398,11 +3404,11 @@ test "C FFI: blar_decrypt_container with wrong password returns auth error" {
     try std.testing.expectEqual(@as(i32, -28), rc);
 }
 
-test "C FFI: blip_error_string returns encryption error strings" {
-    try std.testing.expectEqualSlices(u8, "authentication failed (wrong password or corrupted data)", std.mem.span(blip_error_string(-28)));
-    try std.testing.expectEqualSlices(u8, "password required for encrypted container", std.mem.span(blip_error_string(-29)));
-    try std.testing.expectEqualSlices(u8, "encryption failed", std.mem.span(blip_error_string(-30)));
-    try std.testing.expectEqualSlices(u8, "decryption failed", std.mem.span(blip_error_string(-31)));
+test "C FFI: blar_error_string returns encryption error strings" {
+    try std.testing.expectEqualSlices(u8, "authentication failed (wrong password or corrupted data)", std.mem.span(blar_error_string(-28)));
+    try std.testing.expectEqualSlices(u8, "password required for encrypted container", std.mem.span(blar_error_string(-29)));
+    try std.testing.expectEqualSlices(u8, "encryption failed", std.mem.span(blar_error_string(-30)));
+    try std.testing.expectEqualSlices(u8, "decryption failed", std.mem.span(blar_error_string(-31)));
 }
 
 // ---------------------------------------------------------------------------

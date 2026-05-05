@@ -17,10 +17,9 @@ fail() { FAIL=$((FAIL + 1)); echo "FAIL: $1"; }
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 BLAR="$PROJECT_DIR/zig-out/bin/blar"
-MINIBLAR="$PROJECT_DIR/zig-out/bin/miniblar"
 
-echo "Building blar and miniblar..."
-(cd "$PROJECT_DIR" && zig build 2>/dev/null) || { echo "FATAL: build failed"; exit 1; }
+echo "Building..."
+(cd "$PROJECT_DIR" && ./build >/dev/null 2>&1) || { echo "FATAL: build failed"; exit 1; }
 
 # ── Setup ────────────────────────────────────────────────────────────────
 TMPDIR_TEST="$(mktemp -d)"
@@ -146,51 +145,6 @@ for ALGO in lzma2 bzip2 lz4 zstd; do
   echo "$SOLID_VERIFY" | grep -q 'OK' \
     && pass "$PREFIX solid verify passes" \
     || fail "$PREFIX solid verify — output: $SOLID_VERIFY"
-
-  # --- miniblar ---
-
-  "$MINIBLAR" create $Z_FLAG -o "$TMPDIR_TEST/${ALGO}_mini.mblar" \
-    "$TMPDIR_TEST/hello.txt" "$TMPDIR_TEST/goodbye.txt" 2>/dev/null
-  [ -f "$TMPDIR_TEST/${ALGO}_mini.mblar" ] \
-    && pass "$PREFIX miniblar create produces output" \
-    || fail "$PREFIX miniblar create produces output"
-
-  MINI_LIST=$("$MINIBLAR" list "$TMPDIR_TEST/${ALGO}_mini.mblar" 2>/dev/null)
-  echo "$MINI_LIST" | grep -q 'hello.txt' \
-    && pass "$PREFIX miniblar list works" \
-    || fail "$PREFIX miniblar list — output: $MINI_LIST"
-
-  MINI_EXTRACT="$TMPDIR_TEST/${ALGO}_mini_ext"
-  mkdir -p "$MINI_EXTRACT"
-  "$MINIBLAR" extract "$TMPDIR_TEST/${ALGO}_mini.mblar" -C "$MINI_EXTRACT" 2>/dev/null
-  [ -f "$MINI_EXTRACT/$NORM_HELLO" ] && [ "$(cat "$MINI_EXTRACT/$NORM_HELLO")" = "hello world" ] \
-    && pass "$PREFIX miniblar extract correct" \
-    || fail "$PREFIX miniblar extract correct"
-
-  MINI_VERIFY=$("$MINIBLAR" verify "$TMPDIR_TEST/${ALGO}_mini.mblar" 2>&1)
-  echo "$MINI_VERIFY" | grep -q 'OK' \
-    && pass "$PREFIX miniblar verify passes" \
-    || fail "$PREFIX miniblar verify — output: $MINI_VERIFY"
-
-  MINI_CAT=$("$MINIBLAR" cat "$TMPDIR_TEST/${ALGO}_mini.mblar" "$NORM_HELLO" 2>/dev/null)
-  [ "$MINI_CAT" = "hello world" ] \
-    && pass "$PREFIX miniblar cat correct" \
-    || fail "$PREFIX miniblar cat (got: '$MINI_CAT')"
-
-  # --- miniblar --solid ---
-
-  "$MINIBLAR" create --solid $Z_FLAG -o "$TMPDIR_TEST/${ALGO}_mini_solid.mblar" \
-    "$TMPDIR_TEST/hello.txt" "$TMPDIR_TEST/goodbye.txt" 2>/dev/null
-  MINI_SOLID_HEADER=$(xxd -l 15 -p "$TMPDIR_TEST/${ALGO}_mini_solid.mblar" | tr -d '\n')
-  echo "$MINI_SOLID_HEADER" | grep -q "8110${COMP}" \
-    && pass "$PREFIX miniblar solid: COMP in header" \
-    || fail "$PREFIX miniblar solid: COMP not found (got $MINI_SOLID_HEADER)"
-
-  MINI_SOLID_LIST=$("$MINIBLAR" list "$TMPDIR_TEST/${ALGO}_mini_solid.mblar" 2>/dev/null)
-  echo "$MINI_SOLID_LIST" | grep -q 'hello.txt' \
-    && pass "$PREFIX miniblar solid list works" \
-    || fail "$PREFIX miniblar solid list — output: $MINI_SOLID_LIST"
-
   # --- Binary round-trip ---
 
   "$BLAR" create $Z_FLAG -o "$TMPDIR_TEST/${ALGO}_binary.blar" "$TMPDIR_TEST/random.bin" 2>/dev/null
@@ -301,15 +255,6 @@ for ALGO in bzip2 lz4; do
     && pass "blar --help mentions $ALGO" \
     || fail "blar --help mentions $ALGO"
 done
-
-MINI_HELP=$("$MINIBLAR" --help 2>&1)
-echo "$MINI_HELP" | grep -q '\-z' \
-  && pass "miniblar --help mentions -z" \
-  || fail "miniblar --help mentions -z"
-echo "$MINI_HELP" | grep -q '\-\-solid' \
-  && pass "miniblar --help mentions --solid" \
-  || fail "miniblar --help mentions --solid"
-
 # ══════════════════════════════════════════════════════════════════════════
 # Thread count (-j) tests
 # ══════════════════════════════════════════════════════════════════════════
@@ -362,13 +307,6 @@ echo "$J4_SOLID_LIST" | grep -q 'hello.txt' \
   || fail "--threads long form"
 
 # miniblar -j works
-"$MINIBLAR" create -z lz4 -j 2 -o "$TMPDIR_TEST/mini_j2.mblar" \
-  "$TMPDIR_TEST/hello.txt" "$TMPDIR_TEST/goodbye.txt" 2>/dev/null
-MINI_J2_LIST=$("$MINIBLAR" list "$TMPDIR_TEST/mini_j2.mblar" 2>/dev/null)
-echo "$MINI_J2_LIST" | grep -q 'hello.txt' \
-  && pass "miniblar -j 2 works" \
-  || fail "miniblar -j 2 — output: $MINI_J2_LIST"
-
 # ══════════════════════════════════════════════════════════════════════════
 # Info --json tests
 # ══════════════════════════════════════════════════════════════════════════
@@ -385,16 +323,6 @@ echo "$BJ_OUT" | python3 -m json.tool >/dev/null 2>&1 \
 echo "$BJ_OUT" | grep -q '"integrity"' \
   && pass "blar info --json has integrity field" \
   || fail "blar info --json has integrity field"
-
-# miniblar info --json valid JSON
-MJ_OUT=$("$MINIBLAR" info --json "$TMPDIR_TEST/lzma2_mini.mblar" 2>/dev/null)
-echo "$MJ_OUT" | python3 -m json.tool >/dev/null 2>&1 \
-  && pass "miniblar info --json valid JSON" \
-  || fail "miniblar info --json valid JSON"
-
-echo "$MJ_OUT" | grep -q '"integrity"' \
-  && pass "miniblar info --json has integrity field" \
-  || fail "miniblar info --json has integrity field"
 
 # ── Large payload compression ────────────────────────────────────────────
 

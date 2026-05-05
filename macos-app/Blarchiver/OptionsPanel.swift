@@ -30,7 +30,7 @@ class OptionsPanel: NSViewController {
     private static let kExpand = "expandContainers"
 
     // Keychain service name
-    private static let keychainService = "com.mecha.BlarArchive"
+    private static let keychainService = "com.mecha.Blarchiver"
     private static let keychainAccount = "archivePassword"
 
     var currentOptions: ArchiveOptions {

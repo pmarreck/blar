@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build Blip Archiver macOS app
+# Build Blarchiver macOS app
 # Must be run from the macos-app/ directory or BLIP root
 # Requires: nix develop shell (for libjxl, zlib, etc.)
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BLIP_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BUILD_DIR="$SCRIPT_DIR/build"
-APP_BUNDLE="$BUILD_DIR/Blip Archiver.app"
+APP_BUNDLE="$BUILD_DIR/Blarchiver.app"
 
 SDK="$(xcrun --show-sdk-path)"
 ARCH="$(uname -m)"
 
-echo "=== Building Blip Archiver ==="
+echo "=== Building Blarchiver ==="
 
-# Step 1: Build libblip.a via Zig
-echo "Building libblip.a..."
+# Step 1: Build libblar.a via Zig
+echo "Building libblar.a..."
 cd "$BLIP_ROOT"
 zig build 2>&1 | grep -v "^warning: Unrecognized" || true
 
@@ -24,13 +24,22 @@ zig build 2>&1 | grep -v "^warning: Unrecognized" || true
 LZ4_LIB="$(find .zig-cache -name 'liblz4.a' 2>/dev/null | head -1)"
 ZSTD_LIB="$(find .zig-cache -name 'libzstd.a' 2>/dev/null | head -1)"
 FLAC_LIB="$(find .zig-cache -name 'libflac.a' 2>/dev/null | head -1)"
+# libblip.a comes from the BLIP dep in .zig-cache after `zig build`.
+# Pick the most recently modified one and verify it doesn't carry stale blar_ exports.
+BLIP_LIB=""
+for cand in $(find .zig-cache -name 'libblip.a' 2>/dev/null | xargs ls -t 2>/dev/null); do
+    if ! nm "$cand" 2>/dev/null | grep -q ' T _blar_'; then
+        BLIP_LIB="$cand"
+        break
+    fi
+done
 
 if [ -z "$LZ4_LIB" ] || [ -z "$ZSTD_LIB" ]; then
     echo "ERROR: Cannot find liblz4.a, libzstd.a, or libflac.a in .zig-cache"
     exit 1
 fi
 
-echo "  libblip.a: zig-out/lib/libblip.a"
+echo "  libblar.a: zig-out/lib/libblar.a"
 echo "  liblz4.a:  $LZ4_LIB"
 echo "  libzstd.a: $ZSTD_LIB"
 echo "  libflac.a: $FLAC_LIB"
@@ -73,8 +82,8 @@ echo "  swiftc: $SYSTEM_SWIFTC"
 
 # Zig-built .a files have 4-byte aligned members; Apple ld requires 8-byte.
 # Re-archive with libtool to fix alignment.
-MERGED_LIB="$BUILD_DIR/libblip_merged.a"
-MERGE_LIBS="$BLIP_ROOT/zig-out/lib/libblip.a $BLIP_ROOT/$LZ4_LIB $BLIP_ROOT/$ZSTD_LIB"
+MERGED_LIB="$BUILD_DIR/libblar_merged.a"
+MERGE_LIBS="$BLIP_ROOT/zig-out/lib/libblar.a $BLIP_ROOT/$BLIP_LIB $BLIP_ROOT/$LZ4_LIB $BLIP_ROOT/$ZSTD_LIB"
 if [ -n "$FLAC_LIB" ]; then
     MERGE_LIBS="$MERGE_LIBS $BLIP_ROOT/$FLAC_LIB"
 fi
@@ -82,18 +91,18 @@ libtool -static -o "$MERGED_LIB" $MERGE_LIBS 2>/dev/null
 echo "  Merged lib: $MERGED_LIB"
 
 # Compile the C extraction wrapper (uses blar_common.h)
-# -I for BlarArchive/ FIRST so our stub progrez.h is found before the real one
+# -I for Blarchiver/ FIRST so our stub progrez.h is found before the real one
 echo "Compiling C wrapper..."
 WRAPPER_OBJ="$BUILD_DIR/blar_extract_wrapper.o"
 cc -c -O2 -std=c11 \
-    -I "$SCRIPT_DIR/BlarArchive" \
+    -I "$SCRIPT_DIR/Blarchiver" \
     -I "$BLIP_ROOT/src" \
     -o "$WRAPPER_OBJ" \
-    "$SCRIPT_DIR/BlarArchive/blar_extract_wrapper.c"
+    "$SCRIPT_DIR/Blarchiver/blar_extract_wrapper.c"
 
 SDKROOT= "$SYSTEM_SWIFTC" \
-    -o "$APP_BUNDLE/Contents/MacOS/BlarArchive" \
-    -import-objc-header "$SCRIPT_DIR/BlarArchive/BlarArchive-Bridging-Header.h" \
+    -o "$APP_BUNDLE/Contents/MacOS/Blarchiver" \
+    -import-objc-header "$SCRIPT_DIR/Blarchiver/Blarchiver-Bridging-Header.h" \
     -I "$BLIP_ROOT/src" \
     "$MERGED_LIB" \
     "$WRAPPER_OBJ" \
@@ -105,15 +114,15 @@ SDKROOT= "$SYSTEM_SWIFTC" \
     -target "$ARCH-apple-macosx14.0" \
     -framework Cocoa \
     -framework Security \
-    "$SCRIPT_DIR"/BlarArchive/*.swift
+    "$SCRIPT_DIR"/Blarchiver/*.swift
 
 echo "Swift compilation successful."
 
 # Step 5: Copy Info.plist
-cp "$SCRIPT_DIR/BlarArchive/Info.plist" "$APP_BUNDLE/Contents/"
+cp "$SCRIPT_DIR/Blarchiver/Info.plist" "$APP_BUNDLE/Contents/"
 
 # Step 6: Compile asset catalog
-xcrun actool "$SCRIPT_DIR/BlarArchive/Assets.xcassets" \
+xcrun actool "$SCRIPT_DIR/Blarchiver/Assets.xcassets" \
     --compile "$APP_BUNDLE/Contents/Resources" \
     --platform macosx \
     --minimum-deployment-target 14.0 \
@@ -122,7 +131,7 @@ xcrun actool "$SCRIPT_DIR/BlarArchive/Assets.xcassets" \
     2>/dev/null || echo "  (asset catalog compilation skipped — icons may be missing)"
 
 # Step 7: Copy document icon
-cp "$SCRIPT_DIR/BlarArchive/Assets.xcassets/DocumentIcon.icns" "$APP_BUNDLE/Contents/Resources/"
+cp "$SCRIPT_DIR/Blarchiver/Assets.xcassets/DocumentIcon.icns" "$APP_BUNDLE/Contents/Resources/"
 
 # Step 8: Copy blar CLI into bundle
 cp "$BLIP_ROOT/zig-out/bin/blar" "$APP_BUNDLE/Contents/MacOS/" 2>/dev/null || true

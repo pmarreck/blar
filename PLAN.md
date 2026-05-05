@@ -471,6 +471,11 @@ A successful completion of Phase 2 means:
 
 - (none — every decision in the plan has a recommendation. If a recommendation turns out to be wrong, push back via Peter rather than guessing.)
 
+## Post-v3.0.0 follow-ups (out of Phase 2 scope)
+
+- [ ] **Blarchiver: multi-window support** — let the user spawn additional archiving windows so multiple ops can run in parallel. Each window owns its own archive context, progress state, and document. Reported by Peter 2026-05-05.
+- [ ] **Blarchiver: Stop/Abort button** — surface a cancel control during long-running create/extract ops. Must clean up after itself: close the partially-written archive, remove any temp spill files, free the in-flight Zig allocations. Likely needs a cancellation token threaded through `blar_gui_create`/`blar_gui_extract` and into the streaming pipeline. Reported by Peter 2026-05-05.
+
 ## Glossary
 
 - **blar**: this project. The BLAR archive format, CLI, GUI, codec expansion.

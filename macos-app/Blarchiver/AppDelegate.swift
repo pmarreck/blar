@@ -17,7 +17,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "Blip Archiver"
+        window.title = "Blarchiver"
         window.contentViewController = dropViewController
         window.center()
         window.minSize = NSSize(width: 400, height: 300)
@@ -68,7 +68,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // App menu
         let appMenu = NSMenu()
-        let appName = "Blip Archiver"
+        let appName = "Blarchiver"
         appMenu.addItem(withTitle: "About \(appName)", action: #selector(showAbout), keyEquivalent: "")
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(withTitle: "Hide \(appName)", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
@@ -103,7 +103,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showAbout() {
         let alert = NSAlert()
-        alert.messageText = "Blip Archiver"
+        alert.messageText = "Blarchiver"
         alert.informativeText = """
         A next-generation archive tool built on the BLAR format.
 

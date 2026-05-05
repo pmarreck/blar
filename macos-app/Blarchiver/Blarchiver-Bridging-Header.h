@@ -1,7 +1,7 @@
-#ifndef BlarArchive_Bridging_Header_h
-#define BlarArchive_Bridging_Header_h
+#ifndef Blarchiver_Bridging_Header_h
+#define Blarchiver_Bridging_Header_h
 
-#include "../../src/blip.h"
+#include "../../src/blar.h"
 
 /* Extraction API — subset of blar_common.h needed by the GUI app.
  * We don't include blar_common.h directly because it pulls in progrez.h
@@ -36,11 +36,11 @@ typedef void (*blar_extract_log_fn)(const char *msg, void *ctx);
  * that calls blar_extract_to_dir from blar_common.h. */
 /* Read xattrs and resource fork for a file */
 void blar_gui_read_xattrs(const char *path,
-                           blip_xattr_entry **out_xattrs, size_t *out_count,
+                           blar_xattr_entry **out_xattrs, size_t *out_count,
                            uint8_t **out_resource_fork, size_t *out_resource_fork_len);
 
 /* Free xattr data from blar_gui_read_xattrs */
-void blar_gui_free_xattrs(blip_xattr_entry *xattrs, size_t count,
+void blar_gui_free_xattrs(blar_xattr_entry *xattrs, size_t count,
                             uint8_t *resource_fork);
 
 /* Create archive from paths with container expansion */

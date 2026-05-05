@@ -69,7 +69,7 @@ func parseCLIOptions() -> CLIOptions {
             opts.forceOverwrite = true
         case "-h", "--help":
             fputs("""
-            Usage: BlarArchive [options] [paths...]
+            Usage: Blarchiver [options] [paths...]
 
             Options:
               -z [algo]        Compression: lzma2 (default), zstd, lz4, none

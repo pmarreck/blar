@@ -2,17 +2,17 @@ BLIP_ROOT := $(shell cd .. && pwd)
 BUILD_DIR := build
 APP_NAME := BLAR Archive
 APP_BUNDLE := $(BUILD_DIR)/$(APP_NAME).app
-SWIFT_FILES := $(wildcard BlarArchive/*.swift)
-BRIDGING_HEADER := BlarArchive/BlarArchive-Bridging-Header.h
-LIBBLIP := $(BLIP_ROOT)/zig-out/lib/libblip.a
-ASSETS := BlarArchive/Assets.xcassets
-INFO_PLIST := BlarArchive/Info.plist
-DOC_ICON := BlarArchive/Assets.xcassets/DocumentIcon.icns
+SWIFT_FILES := $(wildcard Blarchiver/*.swift)
+BRIDGING_HEADER := Blarchiver/Blarchiver-Bridging-Header.h
+LIBBLIP := $(BLIP_ROOT)/zig-out/lib/libblar.a
+ASSETS := Blarchiver/Assets.xcassets
+INFO_PLIST := Blarchiver/Info.plist
+DOC_ICON := Blarchiver/Assets.xcassets/DocumentIcon.icns
 
 SDK := $(shell xcrun --show-sdk-path)
 ARCH := $(shell uname -m)
 
-# Zig build also produces lz4 and zstd static libs alongside libblip.a
+# Zig build also produces lz4 and zstd static libs alongside libblar.a
 # (they're in .zig-cache but linked into the compilation graph)
 # We need to find the Zig-built static libs for LZ4 and ZSTD
 ZIG_CACHE := $(BLIP_ROOT)/.zig-cache
@@ -21,7 +21,7 @@ ZIG_CACHE := $(BLIP_ROOT)/.zig-cache
 
 all: $(APP_BUNDLE)
 
-# Build libblip.a and all dependent static libs via Zig
+# Build libblar.a and all dependent static libs via Zig
 libblip:
 	cd $(BLIP_ROOT) && zig build
 
@@ -50,7 +50,7 @@ $(APP_BUNDLE): $(SWIFT_FILES) $(INFO_PLIST) $(DOC_ICON)
 	# Compile Swift → executable
 	# Use xcrun to find the right clang/swift that matches the SDK
 	swiftc \
-		-o "$(APP_BUNDLE)/Contents/MacOS/BlarArchive" \
+		-o "$(APP_BUNDLE)/Contents/MacOS/Blarchiver" \
 		-import-objc-header $(BRIDGING_HEADER) \
 		-I $(BLIP_ROOT)/src \
 		$(LIBBLIP) \

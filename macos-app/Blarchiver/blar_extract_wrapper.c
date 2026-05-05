@@ -7,7 +7,7 @@
  * progrez.h is stubbed by a local progrez.h in this directory — the GUI
  * uses NSProgressIndicator instead of terminal progress bars. */
 
-#include "../../src/blip.h"
+#include "../../src/blar.h"
 #include "../../src/blar_common.h"
 
 /* ── Archive creation ─────────────────────────────────────────────────── */
@@ -131,7 +131,7 @@ int blar_gui_create(const char *const *paths, size_t path_count,
                 return -1;
             }
         }
-        rc = blip_archive_create_streaming(el.entries, el.count,
+        rc = blar_create_streaming(el.entries, el.count,
                                             per_file_comp,
                                             expand_containers, expand_all_zips,
                                             progress_fn ? gui_create_progress_adapter : NULL,
@@ -145,7 +145,7 @@ int blar_gui_create(const char *const *paths, size_t path_count,
             }
         }
 
-        /* progress_adapter already declared above */        rc = blip_archive_create_full(el.entries, el.count, 0,
+        /* progress_adapter already declared above */        rc = blar_create_full(el.entries, el.count, 0,
                                        per_file_comp, num_threads,
                                        progress_fn ? gui_create_progress_adapter : NULL,
                                        NULL,
@@ -179,12 +179,12 @@ int blar_gui_extract(const uint8_t *buf, size_t buf_len,
 /* ── Xattr helpers ────────────────────────────────────────────────────── */
 
 void blar_gui_read_xattrs(const char *path,
-                           blip_xattr_entry **out_xattrs, size_t *out_count,
+                           blar_xattr_entry **out_xattrs, size_t *out_count,
                            uint8_t **out_resource_fork, size_t *out_resource_fork_len) {
     read_file_xattrs(path, out_xattrs, out_count, out_resource_fork, out_resource_fork_len);
 }
 
-void blar_gui_free_xattrs(blip_xattr_entry *xattrs, size_t count,
+void blar_gui_free_xattrs(blar_xattr_entry *xattrs, size_t count,
                             uint8_t *resource_fork) {
     free_file_xattrs(xattrs, count, resource_fork);
 }

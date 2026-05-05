@@ -135,7 +135,7 @@ class BlarBridge {
         if solid && compression != .none {
             var compBuf: UnsafeMutablePointer<UInt8>? = nil
             var compLen: Int = 0
-            let compRc = blip_compress_container(
+            let compRc = blar_compress_container(
                 archiveBuf, archiveLen,
                 compression.rawValue, threads,
                 nil, nil, nil,
@@ -154,7 +154,7 @@ class BlarBridge {
             var encBuf: UnsafeMutablePointer<UInt8>? = nil
             var encLen: Int = 0
             let encRc = pw.withCString { pwPtr -> Int32 in
-                return blip_encrypt_container(
+                return blar_encrypt_container(
                     finalBuf, finalLen,
                     pwPtr, pw.utf8.count,
                     encryption.rawValue,
@@ -218,7 +218,7 @@ class BlarBridge {
 
         let needsDecrypt = archiveData.withUnsafeBytes { ptr -> Bool in
             guard let base = ptr.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return false }
-            return blip_is_encrypted(base, archiveData.count)
+            return blar_is_encrypted(base, archiveData.count)
         }
 
         let needsDecompress: Bool
@@ -233,11 +233,11 @@ class BlarBridge {
             let rc = workingData.withUnsafeBytes { ptr -> Int32 in
                 let base = ptr.baseAddress!.assumingMemoryBound(to: UInt8.self)
                 return pw.withCString { pwPtr in
-                    blip_decrypt_container(base, workingData.count, pwPtr, pw.utf8.count, &decBuf, &decLen)
+                    blar_decrypt_container(base, workingData.count, pwPtr, pw.utf8.count, &decBuf, &decLen)
                 }
             }
             if rc != 0 {
-                throw BlarError.extractFailed("Decryption failed: \(String(cString: blip_error_string(rc)))")
+                throw BlarError.extractFailed("Decryption failed: \(String(cString: blar_error_string(rc)))")
             }
             workingData = Data(bytes: decBuf!, count: decLen)
             blip_free(decBuf, decLen)
@@ -245,7 +245,7 @@ class BlarBridge {
 
         needsDecompress = workingData.withUnsafeBytes { ptr -> Bool in
             guard let base = ptr.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return false }
-            return blip_is_compressed(base, workingData.count)
+            return blar_is_compressed(base, workingData.count)
         }
 
         if needsDecompress {
@@ -253,10 +253,10 @@ class BlarBridge {
             var decLen: Int = 0
             let rc = workingData.withUnsafeBytes { ptr -> Int32 in
                 let base = ptr.baseAddress!.assumingMemoryBound(to: UInt8.self)
-                return blip_decompress_container(base, workingData.count, &decBuf, &decLen)
+                return blar_decompress_container(base, workingData.count, &decBuf, &decLen)
             }
             if rc != 0 {
-                throw BlarError.extractFailed("Decompression failed: \(String(cString: blip_error_string(rc)))")
+                throw BlarError.extractFailed("Decompression failed: \(String(cString: blar_error_string(rc)))")
             }
             workingData = Data(bytes: decBuf!, count: decLen)
             blip_free(decBuf, decLen)

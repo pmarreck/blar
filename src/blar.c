@@ -614,7 +614,7 @@ static int cmd_create(int argc, char **argv) {
 
         uint8_t *archive_buf = NULL;
         size_t archive_len = 0;
-        int32_t rc2 = blip_archive_create_streaming(
+        int32_t rc2 = blar_create_streaming(
             el.entries, el.count,
             compress_algo,
             el.expand_containers, el.expand_all_zips,
@@ -678,7 +678,7 @@ static int cmd_create(int argc, char **argv) {
     uint8_t *archive_buf = NULL;
     size_t archive_len = 0;
     uint32_t create_flags = absolute_names ? BLIP_ARCHIVE_ABSOLUTE_PATHS : 0;
-    int32_t rc = blip_archive_create_full(el.entries, el.count, create_flags,
+    int32_t rc = blar_create_full(el.entries, el.count, create_flags,
                                            per_file_comp, num_threads,
                                            progress ? create_progress_cb : NULL,
                                            progress ? phase_cb : NULL,
@@ -808,7 +808,7 @@ static int cmd_list(int argc, char **argv) {
     }
 
     uint64_t count = 0;
-    int32_t rc = blip_archive_file_count(buf, buf_len, &count);
+    int32_t rc = blar_file_count(buf, buf_len, &count);
     if (rc != BLIP_OK) {
         fprintf(stderr, "blar: list: %s\n", blip_error_string(rc));
         free(buf);
@@ -818,14 +818,14 @@ static int cmd_list(int argc, char **argv) {
     for (uint64_t i = 0; i < count; i++) {
         /* Get entry type */
         uint8_t entry_type = 0;
-        blip_archive_entry_type(buf, buf_len, i, &entry_type);
+        blar_entry_type(buf, buf_len, i, &entry_type);
         char type_char = (entry_type == 0x07) ? 'd' : '-';
 
         /* Check for container DIR */
         if (entry_type == 0x07) {
             const char *co_type = NULL;
             size_t co_type_len = 0;
-            if (blip_archive_entry_container_type(buf, buf_len, i,
+            if (blar_entry_container_type(buf, buf_len, i,
                     &co_type, &co_type_len) == BLIP_OK && co_type != NULL) {
                 const blar_codec_t *codec = blar_codec_find_by_name(&builtin_registry, co_type, co_type_len);
                 if (codec) {
@@ -852,7 +852,7 @@ static int cmd_list(int argc, char **argv) {
 
         const char *path = NULL;
         size_t path_len = 0;
-        rc = blip_archive_file_path(buf, buf_len, i, &path, &path_len);
+        rc = blar_file_path(buf, buf_len, i, &path, &path_len);
         if (rc != BLIP_OK) {
             fprintf(stderr, "blar: list: entry %llu: %s\n",
                     (unsigned long long)i, blip_error_string(rc));
@@ -996,14 +996,14 @@ static int cmd_verify(int argc, char **argv) {
         return EXIT_IO;
     }
 
-    if (!blip_archive_verify(buf, buf_len)) {
+    if (!blar_verify(buf, buf_len)) {
         fprintf(stderr, "blar: verify: archive hash mismatch\n");
         free(buf);
         return EXIT_VERIFY;
     }
 
     uint64_t count = 0;
-    int32_t rc = blip_archive_file_count(buf, buf_len, &count);
+    int32_t rc = blar_file_count(buf, buf_len, &count);
     if (rc != BLIP_OK) {
         fprintf(stderr, "blar: verify: %s\n", blip_error_string(rc));
         free(buf);
@@ -1014,11 +1014,11 @@ static int cmd_verify(int argc, char **argv) {
     uint64_t dir_count = 0;
 
     for (uint64_t i = 0; i < count; i++) {
-        rc = blip_archive_file_verify(buf, buf_len, i);
+        rc = blar_file_verify(buf, buf_len, i);
         if (rc != BLIP_OK) {
             const char *path = NULL;
             size_t path_len = 0;
-            blip_archive_file_path(buf, buf_len, i, &path, &path_len);
+            blar_file_path(buf, buf_len, i, &path, &path_len);
             fprintf(stderr, "blar: verify: entry %llu", (unsigned long long)i);
             if (path) {
                 fprintf(stderr, " ('%.*s')", (int)path_len, path);
@@ -1029,15 +1029,15 @@ static int cmd_verify(int argc, char **argv) {
         }
 
         uint8_t entry_type = 0;
-        blip_archive_entry_type(buf, buf_len, i, &entry_type);
+        blar_entry_type(buf, buf_len, i, &entry_type);
         if (entry_type == 0x07) {
             dir_count++;
             /* Also verify Merkle hash for DIR entries */
-            rc = blip_archive_verify_merkle(buf, buf_len, i);
+            rc = blar_verify_merkle(buf, buf_len, i);
             if (rc != BLIP_OK) {
                 const char *path = NULL;
                 size_t path_len = 0;
-                blip_archive_file_path(buf, buf_len, i, &path, &path_len);
+                blar_file_path(buf, buf_len, i, &path, &path_len);
                 fprintf(stderr, "blar: verify: dir %llu", (unsigned long long)i);
                 if (path) {
                     fprintf(stderr, " ('%.*s')", (int)path_len, path);
@@ -1112,7 +1112,7 @@ static int cmd_info(int argc, char **argv) {
     }
 
     uint64_t count = 0;
-    int32_t rc = blip_archive_file_count(buf, buf_len, &count);
+    int32_t rc = blar_file_count(buf, buf_len, &count);
     if (rc != BLIP_OK) {
         fprintf(stderr, "blar: info: %s\n", blip_error_string(rc));
         free(buf);
@@ -1123,7 +1123,7 @@ static int cmd_info(int argc, char **argv) {
     uint64_t dir_count = 0;
     for (uint64_t i = 0; i < count; i++) {
         uint8_t entry_type = 0;
-        blip_archive_entry_type(buf, buf_len, i, &entry_type);
+        blar_entry_type(buf, buf_len, i, &entry_type);
         if (entry_type == 0x07) dir_count++;
         else file_count++;
     }
@@ -1140,12 +1140,12 @@ static int cmd_info(int argc, char **argv) {
         uint64_t total_content = 0;
         for (uint64_t i = 0; i < count; i++) {
             uint8_t entry_type = 0;
-            blip_archive_entry_type(buf, buf_len, i, &entry_type);
+            blar_entry_type(buf, buf_len, i, &entry_type);
             bool is_dir = (entry_type == 0x07);
 
             const char *path = NULL;
             size_t path_len = 0;
-            rc = blip_archive_file_path(buf, buf_len, i, &path, &path_len);
+            rc = blar_file_path(buf, buf_len, i, &path, &path_len);
             if (rc != BLIP_OK) {
                 fprintf(stderr, "blar: info: entry %llu: %s\n",
                         (unsigned long long)i, blip_error_string(rc));
@@ -1159,7 +1159,7 @@ static int cmd_info(int argc, char **argv) {
             uint32_t uid = 0, gid = 0;
             const char *owner = NULL, *groupname = NULL;
             size_t owner_len = 0, groupname_len = 0;
-            blip_archive_entry_metadata_full(buf, buf_len, i,
+            blar_entry_metadata_full(buf, buf_len, i,
                 &mode, &mtime_ns, &ctime_ns, &birthtime_ns,
                 &uid, &gid, &owner, &owner_len, &groupname, &groupname_len);
 
@@ -1171,7 +1171,7 @@ static int cmd_info(int argc, char **argv) {
             if (!is_dir) {
                 uint8_t *data = NULL;
                 size_t data_len = 0;
-                rc = blip_archive_file_content(buf, buf_len, i, &data, &data_len);
+                rc = blar_file_content(buf, buf_len, i, &data, &data_len);
                 if (rc == BLIP_OK) {
                     printf(", \"size\": %llu", (unsigned long long)data_len);
                     total_content += data_len;
@@ -1195,30 +1195,30 @@ static int cmd_info(int argc, char **argv) {
             if (is_dir) {
                 const char *co_type = NULL;
                 size_t co_type_len = 0;
-                if (blip_archive_entry_container_type(buf, buf_len, i,
+                if (blar_entry_container_type(buf, buf_len, i,
                         &co_type, &co_type_len) == BLIP_OK && co_type != NULL) {
                     printf(", \"container_type\": ");
                     json_print_escaped(stdout, co_type, co_type_len);
                 }
             } else {
                 uint16_t zc_method = 0xFFFF;
-                if (blip_archive_entry_zip_comp(buf, buf_len, i,
+                if (blar_entry_zip_comp(buf, buf_len, i,
                         &zc_method) == BLIP_OK && zc_method != 0xFFFF) {
                     printf(", \"zip_compression_method\": %u", (unsigned)zc_method);
                 }
                 uint64_t po_val = UINT64_MAX;
-                if (blip_archive_entry_pdf_offset(buf, buf_len, i,
+                if (blar_entry_pdf_offset(buf, buf_len, i,
                         &po_val) == BLIP_OK && po_val != UINT64_MAX) {
                     printf(", \"pdf_stream_offset\": %llu", (unsigned long long)po_val);
                 }
                 uint64_t pl_val = UINT64_MAX;
-                if (blip_archive_entry_pdf_length(buf, buf_len, i,
+                if (blar_entry_pdf_length(buf, buf_len, i,
                         &pl_val) == BLIP_OK && pl_val != UINT64_MAX) {
                     printf(", \"pdf_stream_length\": %llu", (unsigned long long)pl_val);
                 }
                 const char *jx_fmt = NULL;
                 size_t jx_fmt_len = 0;
-                if (blip_archive_entry_jxl_source(buf, buf_len, i,
+                if (blar_entry_jxl_source(buf, buf_len, i,
                         &jx_fmt, &jx_fmt_len) == BLIP_OK && jx_fmt != NULL) {
                     printf(", \"jxl_source_format\": \"%.*s\"", (int)jx_fmt_len, jx_fmt);
                 }
@@ -1230,10 +1230,10 @@ static int cmd_info(int argc, char **argv) {
         printf("  ],\n");
         printf("  \"total_content\": %llu,\n", (unsigned long long)total_content);
 
-        bool ok = blip_archive_verify(buf, buf_len);
+        bool ok = blar_verify(buf, buf_len);
         if (ok) {
             for (uint64_t i = 0; i < count; i++) {
-                if (blip_archive_file_verify(buf, buf_len, i) != BLIP_OK) {
+                if (blar_file_verify(buf, buf_len, i) != BLIP_OK) {
                     ok = false;
                     break;
                 }
@@ -1256,14 +1256,14 @@ static int cmd_info(int argc, char **argv) {
     uint64_t total_content = 0;
     for (uint64_t i = 0; i < count; i++) {
         uint8_t entry_type = 0;
-        blip_archive_entry_type(buf, buf_len, i, &entry_type);
+        blar_entry_type(buf, buf_len, i, &entry_type);
         char type_char = (entry_type == 0x07) ? 'd' : '-';
 
         /* Check for container DIR in human-readable output */
         if (entry_type == 0x07) {
             const char *co_type = NULL;
             size_t co_type_len = 0;
-            if (blip_archive_entry_container_type(buf, buf_len, i,
+            if (blar_entry_container_type(buf, buf_len, i,
                     &co_type, &co_type_len) == BLIP_OK && co_type != NULL) {
                 const blar_codec_t *codec = blar_codec_find_by_name(&builtin_registry, co_type, co_type_len);
                 if (codec) {
@@ -1290,7 +1290,7 @@ static int cmd_info(int argc, char **argv) {
 
         const char *path = NULL;
         size_t path_len = 0;
-        rc = blip_archive_file_path(buf, buf_len, i, &path, &path_len);
+        rc = blar_file_path(buf, buf_len, i, &path, &path_len);
         if (rc != BLIP_OK) {
             fprintf(stderr, "blar: info: entry %llu: %s\n",
                     (unsigned long long)i, blip_error_string(rc));
@@ -1304,13 +1304,13 @@ static int cmd_info(int argc, char **argv) {
             int64_t mtime_ns = 0;
             const char *owner = NULL;
             size_t owner_len = 0;
-            blip_archive_entry_metadata(buf, buf_len, i, &mode, &mtime_ns, &owner, &owner_len);
+            blar_entry_metadata(buf, buf_len, i, &mode, &mtime_ns, &owner, &owner_len);
             const char *trail = (path_len > 0 && path[path_len - 1] == '/') ? "" : "/";
             printf("%c %04o  %.*s%s\n", type_char, mode, (int)path_len, path, trail);
         } else {
             uint8_t *data = NULL;
             size_t data_len = 0;
-            rc = blip_archive_file_content(buf, buf_len, i, &data, &data_len);
+            rc = blar_file_content(buf, buf_len, i, &data, &data_len);
             if (rc != BLIP_OK) {
                 fprintf(stderr, "blar: info: entry %llu: %s\n",
                         (unsigned long long)i, blip_error_string(rc));
@@ -1322,7 +1322,7 @@ static int cmd_info(int argc, char **argv) {
             int64_t mtime_ns = 0;
             const char *owner = NULL;
             size_t owner_len = 0;
-            blip_archive_entry_metadata(buf, buf_len, i, &mode, &mtime_ns, &owner, &owner_len);
+            blar_entry_metadata(buf, buf_len, i, &mode, &mtime_ns, &owner, &owner_len);
             printf("%c %04o  %8llu  %.*s\n", type_char, mode,
                    (unsigned long long)data_len, (int)path_len, path);
             total_content += data_len;
@@ -1333,10 +1333,10 @@ static int cmd_info(int argc, char **argv) {
     printf("\n");
     printf("Total content: %llu bytes\n", (unsigned long long)total_content);
 
-    bool ok = blip_archive_verify(buf, buf_len);
+    bool ok = blar_verify(buf, buf_len);
     if (ok) {
         for (uint64_t i = 0; i < count; i++) {
-            if (blip_archive_file_verify(buf, buf_len, i) != BLIP_OK) {
+            if (blar_file_verify(buf, buf_len, i) != BLIP_OK) {
                 ok = false;
                 break;
             }
@@ -1369,7 +1369,7 @@ static int cmd_cat(int argc, char **argv) {
 
     uint8_t *data = NULL;
     size_t data_len = 0;
-    int32_t rc = blip_archive_file_content_by_path(
+    int32_t rc = blar_file_content_by_path(
         buf, buf_len, file_path, strlen(file_path), &data, &data_len);
 
     if (rc == BLIP_ERR_NOT_FOUND) {
@@ -1476,7 +1476,7 @@ static int cmd_text(int argc, char **argv) {
     }
 
     uint64_t count = 0;
-    int32_t rc = blip_archive_file_count(buf, buf_len, &count);
+    int32_t rc = blar_file_count(buf, buf_len, &count);
     if (rc != BLIP_OK) {
         fprintf(stderr, "blar: text: %s\n", blip_error_string(rc));
         free(buf);
@@ -1505,11 +1505,11 @@ static int cmd_text(int argc, char **argv) {
 
     for (uint64_t i = 0; i < count; i++) {
         uint8_t entry_type = 0;
-        blip_archive_entry_type(buf, buf_len, i, &entry_type);
+        blar_entry_type(buf, buf_len, i, &entry_type);
 
         const char *path = NULL;
         size_t path_len = 0;
-        rc = blip_archive_file_path(buf, buf_len, i, &path, &path_len);
+        rc = blar_file_path(buf, buf_len, i, &path, &path_len);
         if (rc != BLIP_OK) {
             fprintf(stderr, "blar: text: entry %llu: %s\n",
                     (unsigned long long)i, blip_error_string(rc));
@@ -1540,7 +1540,7 @@ static int cmd_text(int argc, char **argv) {
         int64_t mtime_ns = 0;
         const char *owner = NULL;
         size_t owner_len = 0;
-        blip_archive_entry_metadata(buf, buf_len, i, &mode, &mtime_ns,
+        blar_entry_metadata(buf, buf_len, i, &mode, &mtime_ns,
                                      &owner, &owner_len);
 
         /* Extract just the basename for display (last component of path) */
@@ -1579,7 +1579,7 @@ static int cmd_text(int argc, char **argv) {
             /* Container type */
             const char *co_type = NULL;
             size_t co_type_len = 0;
-            if (blip_archive_entry_container_type(buf, buf_len, i,
+            if (blar_entry_container_type(buf, buf_len, i,
                     &co_type, &co_type_len) == BLIP_OK && co_type != NULL) {
                 fprintf(out, " co=%.*s", (int)co_type_len, co_type);
             }
@@ -1610,7 +1610,7 @@ static int cmd_text(int argc, char **argv) {
             /* JXL source format */
             const char *jx_fmt = NULL;
             size_t jx_fmt_len = 0;
-            if (blip_archive_entry_jxl_source(buf, buf_len, i,
+            if (blar_entry_jxl_source(buf, buf_len, i,
                     &jx_fmt, &jx_fmt_len) == BLIP_OK && jx_fmt != NULL) {
                 fprintf(out, " jx=%.*s", (int)jx_fmt_len, jx_fmt);
             }
@@ -1618,8 +1618,8 @@ static int cmd_text(int argc, char **argv) {
             /* PDF stream offset/length */
             uint64_t po = UINT64_MAX;
             uint64_t pl = UINT64_MAX;
-            blip_archive_entry_pdf_offset(buf, buf_len, i, &po);
-            blip_archive_entry_pdf_length(buf, buf_len, i, &pl);
+            blar_entry_pdf_offset(buf, buf_len, i, &po);
+            blar_entry_pdf_length(buf, buf_len, i, &pl);
             if (po != UINT64_MAX)
                 fprintf(out, " po=%llu", (unsigned long long)po);
             if (pl != UINT64_MAX)
@@ -1636,7 +1636,7 @@ static int cmd_text(int argc, char **argv) {
             /* Get file content and write payload */
             uint8_t *data = NULL;
             size_t data_len = 0;
-            rc = blip_archive_file_content(buf, buf_len, i, &data, &data_len);
+            rc = blar_file_content(buf, buf_len, i, &data, &data_len);
             if (rc == BLIP_OK && data != NULL && data_len > 0) {
                 text_write_payload(out, data, data_len, depth + 1);
                 blip_free_content(data, data_len);
@@ -1662,7 +1662,7 @@ static int cmd_text(int argc, char **argv) {
  *   fp=N  (flate_predictor)     fc=N     (flate_columns)
  *   fl=N  (flate_colors)        fb=N     (flate_bpc)                    */
 static void parse_text_metadata(const char *start, const char *end,
-                                 blip_archive_entry *entry) {
+                                 blar_entry *entry) {
     const char *p = start;
     while (p < end) {
         /* skip whitespace */
@@ -1982,7 +1982,7 @@ static int cmd_from_text(int argc, char **argv) {
             full_path[archive_path_len] = '\0';
 
             /* Build archive entry */
-            blip_archive_entry entry;
+            blar_entry entry;
             memset(&entry, 0, sizeof(entry));
             entry.path = full_path;
             entry.path_len = archive_path_len;
@@ -2057,7 +2057,7 @@ static int cmd_from_text(int argc, char **argv) {
     {
         uint8_t *archive_buf = NULL;
         size_t archive_len = 0;
-        int32_t rc = blip_archive_create_full(el.entries, el.count, 0, 0, 0,
+        int32_t rc = blar_create_full(el.entries, el.count, 0, 0, 0,
                                                NULL, NULL, NULL,
                                                &archive_buf, &archive_len);
         if (rc != BLIP_OK) {
@@ -2241,7 +2241,7 @@ static int cmd_explode(int argc, char **argv) {
     }
 
     uint64_t count = 0;
-    int32_t rc = blip_archive_file_count(buf, buf_len, &count);
+    int32_t rc = blar_file_count(buf, buf_len, &count);
     if (rc != BLIP_OK) {
         fprintf(stderr, "blar: explode: %s\n", blip_error_string(rc));
         free(buf);
@@ -2265,11 +2265,11 @@ static int cmd_explode(int argc, char **argv) {
     /* Pass 1: create directories and extract files */
     for (uint64_t i = 0; i < count; i++) {
         uint8_t entry_type = 0;
-        blip_archive_entry_type(buf, buf_len, i, &entry_type);
+        blar_entry_type(buf, buf_len, i, &entry_type);
 
         const char *path = NULL;
         size_t path_len = 0;
-        rc = blip_archive_file_path(buf, buf_len, i, &path, &path_len);
+        rc = blar_file_path(buf, buf_len, i, &path, &path_len);
         if (rc != BLIP_OK) {
             fprintf(stderr, "blar: explode: entry %llu: %s\n",
                     (unsigned long long)i, blip_error_string(rc));
@@ -2306,7 +2306,7 @@ static int cmd_explode(int argc, char **argv) {
 
             uint8_t *content = NULL;
             size_t content_len = 0;
-            rc = blip_archive_file_content(buf, buf_len, i, &content, &content_len);
+            rc = blar_file_content(buf, buf_len, i, &content, &content_len);
             if (rc != BLIP_OK) {
                 fprintf(stderr, "blar: explode: cannot read content of '%.*s': %s\n",
                         (int)path_len, path, blip_error_string(rc));
@@ -2334,7 +2334,7 @@ static int cmd_explode(int argc, char **argv) {
         int64_t mtime_ns = 0;
         const char *owner = NULL;
         size_t owner_len = 0;
-        blip_archive_entry_metadata(buf, buf_len, i, &mode, &mtime_ns, &owner, &owner_len);
+        blar_entry_metadata(buf, buf_len, i, &mode, &mtime_ns, &owner, &owner_len);
 
         if (mode != 0) {
             chmod(out_path, mode);
@@ -2344,33 +2344,33 @@ static int cmd_explode(int argc, char **argv) {
     /* Pass 2: build and write __meta__.json sidecars */
     for (uint64_t i = 0; i < count; i++) {
         uint8_t entry_type = 0;
-        blip_archive_entry_type(buf, buf_len, i, &entry_type);
+        blar_entry_type(buf, buf_len, i, &entry_type);
 
         const char *path = NULL;
         size_t path_len = 0;
-        blip_archive_file_path(buf, buf_len, i, &path, &path_len);
+        blar_file_path(buf, buf_len, i, &path, &path_len);
 
         /* Get metadata */
         uint16_t mode = 0;
         int64_t mtime_ns = 0;
         const char *owner = NULL;
         size_t owner_len = 0;
-        blip_archive_entry_metadata(buf, buf_len, i, &mode, &mtime_ns, &owner, &owner_len);
+        blar_entry_metadata(buf, buf_len, i, &mode, &mtime_ns, &owner, &owner_len);
 
         /* Get optional container/jxl/pdf metadata */
         const char *co_type = NULL;
         size_t co_type_len = 0;
-        blip_archive_entry_container_type(buf, buf_len, i, &co_type, &co_type_len);
+        blar_entry_container_type(buf, buf_len, i, &co_type, &co_type_len);
 
         const char *jx_fmt = NULL;
         size_t jx_fmt_len = 0;
-        blip_archive_entry_jxl_source(buf, buf_len, i, &jx_fmt, &jx_fmt_len);
+        blar_entry_jxl_source(buf, buf_len, i, &jx_fmt, &jx_fmt_len);
 
         uint64_t po = UINT64_MAX;
-        blip_archive_entry_pdf_offset(buf, buf_len, i, &po);
+        blar_entry_pdf_offset(buf, buf_len, i, &po);
 
         uint64_t pl = UINT64_MAX;
-        blip_archive_entry_pdf_length(buf, buf_len, i, &pl);
+        blar_entry_pdf_length(buf, buf_len, i, &pl);
 
         /* Determine basename and parent directory */
         /* path is like "dir/sub/file.txt" -- basename is "file.txt", parent is output_dir/dir/sub */
@@ -2713,7 +2713,7 @@ static bool implode_walk(entry_list_t *el, const char *dir_path, const char *pre
             const implode_meta_entry_t *me = find_meta(&meta, dir_basename);
 
             /* Create DIR entry */
-            blip_archive_entry entry;
+            blar_entry entry;
             memset(&entry, 0, sizeof(entry));
             entry.pdf_stream_offset = UINT64_MAX;
             entry.pdf_stream_length = UINT64_MAX;
@@ -2774,7 +2774,7 @@ static bool implode_walk(entry_list_t *el, const char *dir_path, const char *pre
                 }
             }
 
-            blip_archive_entry entry;
+            blar_entry entry;
             memset(&entry, 0, sizeof(entry));
             entry.pdf_stream_offset = UINT64_MAX;
             entry.pdf_stream_length = UINT64_MAX;
@@ -2881,7 +2881,7 @@ static int cmd_implode(int argc, char **argv) {
     /* Create archive */
     uint8_t *archive_buf = NULL;
     size_t archive_len = 0;
-    int32_t rc = blip_archive_create_full(el.entries, el.count, 0, 0, 0,
+    int32_t rc = blar_create_full(el.entries, el.count, 0, 0, 0,
                                            NULL, NULL, NULL,
                                            &archive_buf, &archive_len);
     entry_list_free(&el);

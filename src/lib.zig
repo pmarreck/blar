@@ -138,7 +138,7 @@ export fn blip_error_string(error_code: i32) callconv(.c) [*:0]const u8 {
     };
 }
 
-/// Archive creation flags (must match BLIP_ARCHIVE_* in blip.h).
+/// Archive creation flags (must match BLAR_* in blar.h).
 const BLIP_ARCHIVE_ABSOLUTE_PATHS: u32 = 0x0001;
 
 /// Normalize a path by stripping leading "./" and "/" sequences (tar-style).
@@ -225,7 +225,7 @@ const CArchiveEntry = extern struct {
 };
 
 /// Create a BLIP archive from simple file entries (no metadata beyond path+content).
-export fn blip_archive_create(
+export fn blar_create(
     files: [*]const CFileEntry,
     file_count: usize,
     flags: u32,
@@ -253,7 +253,7 @@ export fn blip_archive_create(
 }
 
 /// Create a full BLIP archive from archive entries (files + directories + metadata).
-export fn blip_archive_create_full(
+export fn blar_create_full(
     entries: [*]const CArchiveEntry,
     entry_count: usize,
     flags: u32,
@@ -372,7 +372,7 @@ export fn blip_archive_create_full(
 }
 
 /// Get the number of entries in a BLIP archive.
-export fn blip_archive_file_count(
+export fn blar_file_count(
     buf: [*]const u8,
     buf_len: usize,
     out_count: *u64,
@@ -383,7 +383,7 @@ export fn blip_archive_file_count(
 }
 
 /// Verify a BLIP archive's xxHash64 integrity.
-export fn blip_archive_verify(
+export fn blar_verify(
     buf: [*]const u8,
     buf_len: usize,
 ) callconv(.c) bool {
@@ -393,7 +393,7 @@ export fn blip_archive_verify(
 
 /// Get the file path at the given index (zero-copy pointer into buf).
 /// Works for both FILE (ARRAY-based) and DIR (DICT-based) entries.
-export fn blip_archive_file_path(
+export fn blar_file_path(
     buf: [*]const u8,
     buf_len: usize,
     index: u64,
@@ -409,7 +409,7 @@ export fn blip_archive_file_path(
 
 /// Get file content at the given index, handling per-file compression transparently.
 /// Caller must free the returned buffer with blip_free_content().
-export fn blip_archive_file_content(
+export fn blar_file_content(
     buf: [*]const u8,
     buf_len: usize,
     index: u64,
@@ -432,7 +432,7 @@ export fn blip_archive_file_content(
     return 0;
 }
 
-/// Free content returned by blip_archive_file_content.
+/// Free content returned by blar_file_content.
 export fn blip_free_content(ptr: [*]u8, len: usize) callconv(.c) void {
     if (len > 0) {
         page_allocator.free(ptr[0..len]);
@@ -441,7 +441,7 @@ export fn blip_free_content(ptr: [*]u8, len: usize) callconv(.c) void {
 
 /// Get file content by path, handling per-file compression transparently.
 /// Caller must free the returned buffer with blip_free_content().
-export fn blip_archive_file_content_by_path(
+export fn blar_file_content_by_path(
     buf: [*]const u8,
     buf_len: usize,
     path: [*]const u8,
@@ -468,7 +468,7 @@ export fn blip_archive_file_content_by_path(
 /// Verify a single entry's hash within an archive.
 /// For FILE: verifies both DATA hash and ARRAY hash.
 /// For DIR: verifies container hash.
-export fn blip_archive_file_verify(
+export fn blar_file_verify(
     buf: [*]const u8,
     buf_len: usize,
     index: u64,
@@ -481,7 +481,7 @@ export fn blip_archive_file_verify(
 
 /// Verify a DIR entry's Merkle hash by recomputing from child FILE checksums.
 /// Returns 0 if valid, -7 if hash mismatch, negative error code on failure.
-export fn blip_archive_verify_merkle(
+export fn blar_verify_merkle(
     buf: [*]const u8,
     buf_len: usize,
     index: u64,
@@ -498,7 +498,7 @@ export fn blip_archive_verify_merkle(
 
 /// Get the container type of an entry at the given index.
 /// Returns 0 on success. out_type will be 5 (FILE) or 7 (DIR) (v2 ContainerTypeId).
-export fn blip_archive_entry_type(
+export fn blar_entry_type(
     buf: [*]const u8,
     buf_len: usize,
     index: u64,
@@ -512,7 +512,7 @@ export fn blip_archive_entry_type(
 
 /// Extract metadata from an entry. Works for both FILE and DIR entries.
 /// Uses 2-char keys (md, mt, un for mode, mtime, username).
-export fn blip_archive_entry_metadata(
+export fn blar_entry_metadata(
     buf: [*]const u8,
     buf_len: usize,
     index: u64,
@@ -586,7 +586,7 @@ fn readMetadataFromDict(
 }
 
 /// Extract full metadata from an archive entry (all timestamp fields, uid/gid, groupname).
-export fn blip_archive_entry_metadata_full(
+export fn blar_entry_metadata_full(
     buf: [*]const u8,
     buf_len: usize,
     index: u64,
@@ -677,7 +677,7 @@ fn readExtendedMetadata(
 /// For FILE entries: reads forks DICT (element 2), "rf" key → resource_fork, rest → xattrs.
 /// For DIR entries: reads "xa" key from the DIR dict.
 /// Returns 0 on success, negative error code on failure.
-export fn blip_archive_entry_xattrs(
+export fn blar_entry_xattrs(
     buf: [*]const u8,
     buf_len: usize,
     index: u64,
@@ -834,9 +834,9 @@ fn extractDirXattrs(
     return 0;
 }
 
-/// Free xattr data returned by blip_archive_entry_xattrs.
+/// Free xattr data returned by blar_entry_xattrs.
 /// Only the CXattrEntry array is heap-allocated; name/value pointers are zero-copy into archive buf.
-export fn blip_free_xattrs(
+export fn blar_free_xattrs(
     xattrs: ?[*]CXattrEntry,
     count: usize,
     resource_fork: ?[*]u8,
@@ -850,7 +850,7 @@ export fn blip_free_xattrs(
     }
 }
 
-/// Free a buffer allocated by blip_archive_create or blip_archive_create_full.
+/// Free a buffer allocated by blar_create or blar_create_full.
 export fn blip_free(ptr: [*]u8, len: usize) callconv(.c) void {
     page_allocator.free(ptr[0..len]);
 }
@@ -1129,7 +1129,7 @@ export fn blip_is_compressed(buf: [*]const u8, buf_len: usize) callconv(.c) bool
 /// Output: a DATA container with COMP=lzma2, DECOMP_LEN, and CSUM=blake3_128 attributes.
 /// Returns 0 on success, negative error code on failure.
 /// Caller must free output buffer with blip_free().
-export fn blip_lzma2_compress(
+export fn blar_lzma2_compress(
     buf: [*]const u8,
     buf_len: usize,
     out_buf: *[*]u8,
@@ -1150,7 +1150,7 @@ export fn blip_lzma2_compress(
 /// Verifies checksum before decompressing.
 /// Returns 0 on success, negative error code on failure.
 /// Caller must free output buffer with blip_free().
-export fn blip_lzma2_decompress(
+export fn blar_lzma2_decompress(
     buf: [*]const u8,
     buf_len: usize,
     out_buf: *[*]u8,
@@ -1310,18 +1310,18 @@ fn encryptionErrorCode(err: anytype) i32 {
 const zip_mod = blip.zip_mod;
 
 /// Check if buffer starts with ZIP magic bytes (PK\x03\x04).
-export fn blip_is_zip(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
+export fn blar_is_zip(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
     if (buf_len < 4) return false;
     return zip_mod.isZipMagic(buf[0..buf_len]);
 }
 
 /// Check if a ZIP buffer contains any encrypted entries.
-export fn blip_zip_has_encrypted(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
+export fn blar_zip_has_encrypted(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
     return zip_mod.hasEncryptedEntries(page_allocator, buf[0..buf_len]) catch false;
 }
 
 /// Get the number of entries in a ZIP buffer.
-export fn blip_zip_entry_count(buf: [*]const u8, buf_len: usize, out_count: *u64) callconv(.c) i32 {
+export fn blar_zip_entry_count(buf: [*]const u8, buf_len: usize, out_count: *u64) callconv(.c) i32 {
     const entries = zip_mod.readEntries(page_allocator, buf[0..buf_len]) catch |e| return zipErrorCode(e);
     defer page_allocator.free(entries);
     out_count.* = entries.len;
@@ -1329,7 +1329,7 @@ export fn blip_zip_entry_count(buf: [*]const u8, buf_len: usize, out_count: *u64
 }
 
 /// Get info about a specific ZIP entry by index.
-export fn blip_zip_entry_info(
+export fn blar_zip_entry_info(
     buf: [*]const u8,
     buf_len: usize,
     index: u64,
@@ -1357,7 +1357,7 @@ export fn blip_zip_entry_info(
 
 /// Extract (decompress) a specific ZIP entry by index.
 /// Caller must free returned buffer with blip_free().
-export fn blip_zip_extract_entry(
+export fn blar_zip_extract_entry(
     buf: [*]const u8,
     buf_len: usize,
     index: u64,
@@ -1387,7 +1387,7 @@ const CZipWriteEntry = extern struct {
 
 /// Create a ZIP archive from entries.
 /// Caller must free returned buffer with blip_free().
-export fn blip_zip_create(
+export fn blar_zip_create(
     c_entries: [*]const CZipWriteEntry,
     count: usize,
     out_buf: *[*]u8,
@@ -1414,7 +1414,7 @@ export fn blip_zip_create(
 }
 
 /// Read container_type from a DIR entry in a BLIP archive.
-export fn blip_archive_entry_container_type(
+export fn blar_entry_container_type(
     buf: [*]const u8,
     buf_len: usize,
     index: u64,
@@ -1443,7 +1443,7 @@ export fn blip_archive_entry_container_type(
 }
 
 /// Read zip_compression_method from a FILE entry in a BLIP archive.
-export fn blip_archive_entry_zip_comp(
+export fn blar_entry_zip_comp(
     buf: [*]const u8,
     buf_len: usize,
     index: u64,
@@ -1492,12 +1492,12 @@ const fits_mod = blip.fits_mod;
 const aiff_mod = blip.aiff_mod;
 
 /// Check if buffer starts with PDF magic bytes (%PDF-).
-export fn blip_is_pdf(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
+export fn blar_is_pdf(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
     return pdf_mod.isPdfMagic(buf[0..buf_len]);
 }
 
 /// Count JPEG streams in a PDF buffer.
-export fn blip_pdf_jpeg_count(buf: [*]const u8, buf_len: usize, out_count: *u64) callconv(.c) i32 {
+export fn blar_pdf_jpeg_count(buf: [*]const u8, buf_len: usize, out_count: *u64) callconv(.c) i32 {
     const streams = pdf_mod.findJpegStreams(page_allocator, buf[0..buf_len]) catch return -37;
     defer page_allocator.free(streams);
     out_count.* = streams.len;
@@ -1505,7 +1505,7 @@ export fn blip_pdf_jpeg_count(buf: [*]const u8, buf_len: usize, out_count: *u64)
 }
 
 /// Get info about a specific JPEG stream in a PDF by index.
-export fn blip_pdf_jpeg_info(
+export fn blar_pdf_jpeg_info(
     buf: [*]const u8,
     buf_len: usize,
     idx: u64,
@@ -1527,9 +1527,9 @@ export fn blip_pdf_jpeg_info(
 
 /// Find all JPEG streams in a PDF and return their info in parallel arrays.
 /// Caller must free the output arrays with blip_free when done.
-/// This is much faster than calling blip_pdf_jpeg_count + blip_pdf_jpeg_info in a loop
+/// This is much faster than calling blar_pdf_jpeg_count + blar_pdf_jpeg_info in a loop
 /// because it only scans the PDF once.
-export fn blip_pdf_jpeg_streams(
+export fn blar_pdf_jpeg_streams(
     buf: [*]const u8,
     buf_len: usize,
     out_count: *u64,
@@ -1579,7 +1579,7 @@ export fn blip_pdf_jpeg_streams(
 }
 
 /// Create a PDF shell by zeroing JPEG stream regions.
-export fn blip_pdf_create_shell(
+export fn blar_pdf_create_shell(
     buf: [*]const u8,
     buf_len: usize,
     offsets: [*]const u64,
@@ -1607,7 +1607,7 @@ export fn blip_pdf_create_shell(
 }
 
 /// Losslessly transcode JPEG to JPEG XL.
-export fn blip_jxl_from_jpeg(
+export fn blar_jxl_from_jpeg(
     jpeg: [*]const u8,
     jpeg_len: usize,
     out_jxl: *[*]u8,
@@ -1620,7 +1620,7 @@ export fn blip_jxl_from_jpeg(
 }
 
 /// Losslessly transcode JPEG XL back to JPEG.
-export fn blip_jxl_to_jpeg(
+export fn blar_jxl_to_jpeg(
     jxl: [*]const u8,
     jxl_len: usize,
     out_jpeg: *[*]u8,
@@ -1633,7 +1633,7 @@ export fn blip_jxl_to_jpeg(
 }
 
 /// Encode raw pixels to JXL lossless.
-export fn blip_jxl_from_pixels(
+export fn blar_jxl_from_pixels(
     pixels: [*]const u8,
     pixels_len: usize,
     width: u32,
@@ -1656,7 +1656,7 @@ export fn blip_jxl_from_pixels(
 }
 
 /// Decode JXL to raw pixels.
-export fn blip_jxl_to_pixels(
+export fn blar_jxl_to_pixels(
     jxl: [*]const u8,
     jxl_len: usize,
     out_pixels: *[*]u8,
@@ -1680,13 +1680,13 @@ export fn blip_jxl_to_pixels(
 // --- PNG ---
 
 /// Check if buffer starts with PNG signature.
-export fn blip_is_png(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
+export fn blar_is_png(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
     return png_mod.isPngMagic(buf[0..buf_len]);
 }
 
 /// Parse a PNG into raw pixels + metadata.
 /// meta = [u32_be head_len][pre_idat_bytes][post_idat_bytes]
-export fn blip_png_parse(
+export fn blar_png_parse(
     png: [*]const u8,
     png_len: usize,
     out_pixels: *[*]u8,
@@ -1727,7 +1727,7 @@ export fn blip_png_parse(
 }
 
 /// Encode raw pixels + metadata back to PNG.
-export fn blip_png_encode(
+export fn blar_png_encode(
     pixels: [*]const u8,
     pixels_len: usize,
     width: u32,
@@ -1773,14 +1773,14 @@ export fn blip_png_encode(
 // --- BMP ---
 
 /// Check if buffer starts with BMP magic bytes (BM).
-export fn blip_is_bmp(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
+export fn blar_is_bmp(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
     return bmp_mod.isBmpMagic(buf[0..buf_len]);
 }
 
 /// Parse a BMP into raw pixels + header metadata.
 /// Outputs pixels in top-to-bottom RGB(A) order.
 /// header_meta contains the original BMP header bytes for faithful reconstruction.
-export fn blip_bmp_parse(
+export fn blar_bmp_parse(
     bmp: [*]const u8,
     bmp_len: usize,
     out_pixels: *[*]u8,
@@ -1822,7 +1822,7 @@ export fn blip_bmp_parse(
 }
 
 /// Encode raw pixels + BMP header metadata back to a BMP file.
-export fn blip_bmp_encode(
+export fn blar_bmp_encode(
     pixels: [*]const u8,
     pixels_len: usize,
     width: u32,
@@ -1871,14 +1871,14 @@ export fn blip_bmp_encode(
 // --- TAR ---
 
 /// Check if buffer starts with a valid tar header (ustar magic or valid checksum).
-export fn blip_is_tar(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
+export fn blar_is_tar(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
     return tar_mod.isTarMagic(buf[0..buf_len]);
 }
 
 /// Parse a tar archive into individual entries.
 /// Returns entry count and parallel arrays of paths, contents, headers, and typeflags.
 /// Caller must free all output arrays with blip_free.
-export fn blip_tar_parse(
+export fn blar_tar_parse(
     tar: [*]const u8,
     tar_len: usize,
     out_count: *usize,
@@ -1980,7 +1980,7 @@ export fn blip_tar_parse(
 }
 
 /// Reconstruct a tar archive from entries.
-export fn blip_tar_encode(
+export fn blar_tar_encode(
     count: usize,
     headers: [*]const [*]const u8,
     contents: [*]const [*]const u8,
@@ -2012,13 +2012,13 @@ export fn blip_tar_encode(
 // --- TIFF ---
 
 /// Check if buffer starts with TIFF magic bytes (II*\0 or MM\0*).
-export fn blip_is_tiff(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
+export fn blar_is_tiff(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
     return tiff_mod.isTiffMagic(buf[0..buf_len]);
 }
 
 /// Parse a TIFF into raw pixels + original file bytes (for reconstruction).
 /// Only handles uncompressed 8/16-bit TIFF. Returns error for compressed TIFF.
-export fn blip_tiff_parse(
+export fn blar_tiff_parse(
     tiff: [*]const u8,
     tiff_len: usize,
     out_pixels: *[*]u8,
@@ -2049,13 +2049,13 @@ export fn blip_tiff_parse(
 // --- GIF ---
 
 /// Check if buffer starts with GIF magic bytes (GIF87a or GIF89a).
-export fn blip_is_gif(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
+export fn blar_is_gif(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
     return gif_mod.isGifMagic(buf[0..buf_len]);
 }
 
 /// Parse a static GIF into RGBA pixels + original file (for reconstruction).
 /// Returns error for animated GIFs.
-export fn blip_gif_parse(
+export fn blar_gif_parse(
     gif: [*]const u8,
     gif_len: usize,
     out_pixels: *[*]u8,
@@ -2093,12 +2093,12 @@ export fn blip_gif_parse(
 // --- TGA ---
 
 /// Check if buffer looks like an uncompressed true-color TGA.
-export fn blip_is_tga(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
+export fn blar_is_tga(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
     return tga_mod.isTgaMagic(buf[0..buf_len]);
 }
 
 /// Parse a TGA into raw pixels + header metadata.
-export fn blip_tga_parse(
+export fn blar_tga_parse(
     tga: [*]const u8,
     tga_len: usize,
     out_pixels: *[*]u8,
@@ -2147,7 +2147,7 @@ export fn blip_tga_parse(
 }
 
 /// Encode raw pixels + TGA metadata back to a TGA file.
-export fn blip_tga_encode(
+export fn blar_tga_encode(
     pixels: [*]const u8,
     pixels_len: usize,
     width: u32,
@@ -2201,13 +2201,13 @@ export fn blip_tga_encode(
 // --- WAV/FLAC ---
 
 /// Check if buffer starts with WAV magic (RIFF....WAVE).
-export fn blip_is_wav(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
+export fn blar_is_wav(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
     return wav_mod.isWavMagic(buf[0..buf_len]);
 }
 
 /// Parse WAV, encode PCM to FLAC, return FLAC data + WAV metadata.
 /// Meta format: [u32_le file_size][u32_le data_offset][u32_le data_size][pre_data][post_data]
-export fn blip_wav_to_flac(
+export fn blar_wav_to_flac(
     wav: [*]const u8,
     wav_len: usize,
     out_flac: *[*]u8,
@@ -2240,7 +2240,7 @@ export fn blip_wav_to_flac(
 }
 
 /// Decode FLAC back to PCM, reconstruct WAV from metadata + PCM.
-export fn blip_flac_to_wav(
+export fn blar_flac_to_wav(
     flac_data: [*]const u8,
     flac_len: usize,
     meta: [*]const u8,
@@ -2298,12 +2298,12 @@ export fn blip_flac_to_wav(
 // --- AIFF ---
 
 /// Check if buffer starts with AIFF magic (FORM....AIFF).
-export fn blip_is_aiff(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
+export fn blar_is_aiff(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
     return aiff_mod.isAiffMagic(buf[0..buf_len]);
 }
 
 /// Parse AIFF, encode PCM to FLAC, return FLAC data + AIFF metadata.
-export fn blip_aiff_to_flac(
+export fn blar_aiff_to_flac(
     aiff: [*]const u8,
     aiff_len: usize,
     out_flac: *[*]u8,
@@ -2335,7 +2335,7 @@ export fn blip_aiff_to_flac(
 }
 
 /// Decode FLAC back to PCM, reconstruct AIFF from metadata.
-export fn blip_flac_to_aiff(
+export fn blar_flac_to_aiff(
     flac_data: [*]const u8,
     flac_len: usize,
     meta: [*]const u8,
@@ -2410,13 +2410,13 @@ export fn blip_flac_to_aiff(
 // --- FITS ---
 
 /// Check if buffer starts with FITS magic (SIMPLE = T).
-export fn blip_is_fits(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
+export fn blar_is_fits(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
     return fits_mod.isFitsMagic(buf[0..buf_len]);
 }
 
 /// Parse FITS into raw pixels + header metadata.
 /// For 16-bit FITS, pixels are big-endian. Caller handles endian conversion for JXL.
-export fn blip_fits_parse(
+export fn blar_fits_parse(
     fits: [*]const u8,
     fits_len: usize,
     out_pixels: *[*]u8,
@@ -2444,7 +2444,7 @@ export fn blip_fits_parse(
 
 // --- NIfTI ---
 
-export fn blip_is_nifti(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
+export fn blar_is_nifti(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
     return nifti_mod.isNiftiMagic(buf[0..buf_len]);
 }
 
@@ -2452,12 +2452,12 @@ export fn blip_is_nifti(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
 // --- DICOM ---
 
 /// Check if buffer starts with DICOM magic (128-byte preamble + "DICM").
-export fn blip_is_dicom(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
+export fn blar_is_dicom(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
     return dicom_mod.isDicomMagic(buf[0..buf_len]);
 }
 
 /// Parse DICOM into raw pixels + metadata (non-pixel bytes).
-export fn blip_dicom_parse(
+export fn blar_dicom_parse(
     dcm: [*]const u8,
     dcm_len: usize,
     out_pixels: *[*]u8,
@@ -2485,7 +2485,7 @@ export fn blip_dicom_parse(
 // --- Container Expansion/Collapse (unified entry point) ---
 
 /// Detect which codec matches content by magic bytes. Returns codec name or NULL.
-export fn blip_detect_codec(buf: [*]const u8, buf_len: usize, out_name: *[*]const u8, out_name_len: *usize) callconv(.c) bool {
+export fn blar_detect_codec(buf: [*]const u8, buf_len: usize, out_name: *[*]const u8, out_name_len: *usize) callconv(.c) bool {
     if (expansion_mod.detectCodec(buf[0..buf_len])) |codec_id| {
         const name = codec_id.name();
         out_name.* = name.ptr;
@@ -2496,7 +2496,7 @@ export fn blip_detect_codec(buf: [*]const u8, buf_len: usize, out_name: *[*]cons
 
 /// Expand a file into container entries. Returns 0 on success, -1 if not expandable.
 /// out_count entries are returned; each has path_suffix, content, content_len, is_dir, jxl_source.
-export fn blip_expand_file(
+export fn blar_expand_file(
     content: [*]const u8,
     content_len: usize,
     codec_name: [*]const u8,
@@ -2574,7 +2574,7 @@ export fn blip_expand_file(
 /// Collapse a container back to its original file.
 /// Takes codec name + array of (inner_path, content) children.
 /// Returns reconstructed file bytes.
-export fn blip_collapse_container(
+export fn blar_collapse_container(
     codec_name: [*]const u8,
     codec_name_len: usize,
     child_count: usize,
@@ -2622,10 +2622,10 @@ export fn blip_collapse_container(
 // --- Streaming archive creation ---
 
 /// Create a BLAR archive using streaming (spill-to-disk) approach.
-/// Uses the same blip_archive_entry C struct but reads file content
+/// Uses the same blar_entry C struct but reads file content
 /// from source_path on demand instead of requiring content in memory.
-/// Produces byte-identical output to blip_archive_create_full.
-export fn blip_archive_create_streaming(
+/// Produces byte-identical output to blar_create_full.
+export fn blar_create_streaming(
     c_entries: [*]const CArchiveEntry,
     entry_count: usize,
     per_file_comp_algo: u8,
@@ -2748,7 +2748,7 @@ export fn blip_archive_create_streaming(
 /// Find all FlateDecode image streams in a PDF and return their info in parallel arrays.
 /// Only finds streams with Predictor >= 10 (PNG-style, worth transcoding to JXL).
 /// Caller must free the output arrays with blip_free when done.
-export fn blip_pdf_flate_streams(
+export fn blar_pdf_flate_streams(
     buf: [*]const u8,
     buf_len: usize,
     out_count: *u64,
@@ -2817,7 +2817,7 @@ export fn blip_pdf_flate_streams(
 }
 
 /// Decompress zlib data. Caller must free output with blip_free.
-export fn blip_zlib_decompress(
+export fn blar_zlib_decompress(
     data: [*]const u8,
     data_len: usize,
     out: *[*]u8,
@@ -2830,7 +2830,7 @@ export fn blip_zlib_decompress(
 }
 
 /// Compress data with zlib (stored blocks). Caller must free output with blip_free.
-export fn blip_zlib_compress(
+export fn blar_zlib_compress(
     data: [*]const u8,
     data_len: usize,
     out: *[*]u8,
@@ -2843,7 +2843,7 @@ export fn blip_zlib_compress(
 }
 
 /// Decompress gzip data. Caller must free output with blip_free.
-export fn blip_gz_decompress(
+export fn blar_gz_decompress(
     data: [*]const u8,
     data_len: usize,
     out: *[*]u8,
@@ -2856,7 +2856,7 @@ export fn blip_gz_decompress(
 }
 
 /// Compress data to gzip format at default level. Caller must free output with blip_free.
-export fn blip_gz_compress(
+export fn blar_gz_compress(
     data: [*]const u8,
     data_len: usize,
     out: *[*]u8,
@@ -2870,7 +2870,7 @@ export fn blip_gz_compress(
 
 /// Compress data to gzip format at a specific compression level (1-9).
 /// Caller must free output with blip_free.
-export fn blip_gz_compress_level(
+export fn blar_gz_compress_level(
     data: [*]const u8,
     data_len: usize,
     level: u8,
@@ -2885,7 +2885,7 @@ export fn blip_gz_compress_level(
 
 /// Guess the gzip compression level from original compressed + decompressed data.
 /// Returns the guessed level (2, 6, or 9).
-export fn blip_gz_guess_level(
+export fn blar_gz_guess_level(
     compressed: [*]const u8,
     compressed_len: usize,
     decompressed: [*]const u8,
@@ -2895,14 +2895,14 @@ export fn blip_gz_guess_level(
 }
 
 /// Check if buffer starts with gzip magic bytes (0x1f 0x8b).
-export fn blip_is_gz(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
+export fn blar_is_gz(buf: [*]const u8, buf_len: usize) callconv(.c) bool {
     return buf_len >= 2 and buf[0] == 0x1f and buf[1] == 0x8b;
 }
 
 
 /// Remove PNG-style row filters from FlateDecode data.
 /// Returns raw pixel data. Caller must free output with blip_free.
-export fn blip_pdf_defilter(
+export fn blar_pdf_defilter(
     data: [*]const u8,
     data_len: usize,
     columns: u32,
@@ -2920,7 +2920,7 @@ export fn blip_pdf_defilter(
 
 /// Re-apply PNG-style row filters to pixel data for FlateDecode.
 /// Caller must free output with blip_free.
-export fn blip_pdf_refilter(
+export fn blar_pdf_refilter(
     pixels: [*]const u8,
     pixels_len: usize,
     columns: u32,
@@ -2940,7 +2940,7 @@ export fn blip_pdf_refilter(
 /// Updates /Length values and rebuilds the xref table.
 /// Returns BLIP_OK on success, -42 if the PDF uses xref streams (caller should skip),
 /// or negative error code on failure.
-export fn blip_pdf_rewrite_streams(
+export fn blar_pdf_rewrite_streams(
     shell: [*]const u8,
     shell_len: usize,
     count: usize,
@@ -2984,7 +2984,7 @@ export fn blip_pdf_rewrite_streams(
 /// Find all non-image FlateDecode content streams in a PDF.
 /// Returns parallel arrays of offsets and lengths for each stream.
 /// Caller must free the returned arrays with blip_free().
-export fn blip_pdf_content_streams(
+export fn blar_pdf_content_streams(
     buf: [*]const u8,
     buf_len: usize,
     out_count: *u64,
@@ -3016,7 +3016,7 @@ export fn blip_pdf_content_streams(
 }
 
 /// Read pdf_stream_offset from a FILE entry in a BLIP archive.
-export fn blip_archive_entry_pdf_offset(
+export fn blar_entry_pdf_offset(
     buf: [*]const u8,
     buf_len: usize,
     index: u64,
@@ -3043,7 +3043,7 @@ export fn blip_archive_entry_pdf_offset(
 }
 
 /// Read pdf_stream_length from a FILE entry in a BLIP archive.
-export fn blip_archive_entry_pdf_length(
+export fn blar_entry_pdf_length(
     buf: [*]const u8,
     buf_len: usize,
     index: u64,
@@ -3070,7 +3070,7 @@ export fn blip_archive_entry_pdf_length(
 }
 
 /// Read jxl_source_format from a FILE entry in a BLIP archive.
-export fn blip_archive_entry_jxl_source(
+export fn blar_entry_jxl_source(
     buf: [*]const u8,
     buf_len: usize,
     index: u64,
@@ -3154,37 +3154,37 @@ test "C FFI: blip_normalize_path works" {
     try std.testing.expectEqualSlices(u8, "foo/bar", out_path[0..out_len]);
 }
 
-test "C FFI: blip_archive_create normalizes paths by default" {
+test "C FFI: blar_create normalizes paths by default" {
     const c_files = [_]CFileEntry{
         .{ .path = "/tmp/test.txt", .path_len = 13, .content = "data", .content_len = 4 },
     };
     var out_buf: [*]u8 = undefined;
     var out_len: usize = undefined;
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_create(&c_files, 1, 0, &out_buf, &out_len));
+    try std.testing.expectEqual(@as(i32, 0), blar_create(&c_files, 1, 0, &out_buf, &out_len));
     defer blip_free(out_buf, out_len);
 
     var path_ptr: [*]const u8 = undefined;
     var path_len: usize = undefined;
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_file_path(out_buf, out_len, 0, &path_ptr, &path_len));
+    try std.testing.expectEqual(@as(i32, 0), blar_file_path(out_buf, out_len, 0, &path_ptr, &path_len));
     try std.testing.expectEqualSlices(u8, "tmp/test.txt", path_ptr[0..path_len]);
 }
 
-test "C FFI: blip_archive_create preserves absolute paths with flag" {
+test "C FFI: blar_create preserves absolute paths with flag" {
     const c_files = [_]CFileEntry{
         .{ .path = "/tmp/test.txt", .path_len = 13, .content = "data", .content_len = 4 },
     };
     var out_buf: [*]u8 = undefined;
     var out_len: usize = undefined;
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_create(&c_files, 1, BLIP_ARCHIVE_ABSOLUTE_PATHS, &out_buf, &out_len));
+    try std.testing.expectEqual(@as(i32, 0), blar_create(&c_files, 1, BLIP_ARCHIVE_ABSOLUTE_PATHS, &out_buf, &out_len));
     defer blip_free(out_buf, out_len);
 
     var path_ptr: [*]const u8 = undefined;
     var path_len: usize = undefined;
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_file_path(out_buf, out_len, 0, &path_ptr, &path_len));
+    try std.testing.expectEqual(@as(i32, 0), blar_file_path(out_buf, out_len, 0, &path_ptr, &path_len));
     try std.testing.expectEqualSlices(u8, "/tmp/test.txt", path_ptr[0..path_len]);
 }
 
-test "C FFI: blip_archive_create and blip_archive_file_count round-trip" {
+test "C FFI: blar_create and blar_file_count round-trip" {
     const paths = [_][*]const u8{ "hello.txt", "world.txt" };
     const path_lens = [_]usize{ 9, 9 };
     const contents = [_][*]const u8{ "Hello!", "World!" };
@@ -3197,35 +3197,35 @@ test "C FFI: blip_archive_create and blip_archive_file_count round-trip" {
 
     var out_buf: [*]u8 = undefined;
     var out_len: usize = undefined;
-    const create_result = blip_archive_create(&c_files, 2, 0, &out_buf, &out_len);
+    const create_result = blar_create(&c_files, 2, 0, &out_buf, &out_len);
     try std.testing.expectEqual(@as(i32, 0), create_result);
     defer blip_free(out_buf, out_len);
 
     var count: u64 = undefined;
-    const count_result = blip_archive_file_count(out_buf, out_len, &count);
+    const count_result = blar_file_count(out_buf, out_len, &count);
     try std.testing.expectEqual(@as(i32, 0), count_result);
     try std.testing.expectEqual(@as(u64, 2), count);
 
-    try std.testing.expect(blip_archive_verify(out_buf, out_len));
+    try std.testing.expect(blar_verify(out_buf, out_len));
 }
 
-test "C FFI: blip_archive_verify returns false on corrupted data" {
+test "C FFI: blar_verify returns false on corrupted data" {
     const c_files = [_]CFileEntry{
         .{ .path = "test.txt", .path_len = 8, .content = "data", .content_len = 4 },
     };
     var out_buf: [*]u8 = undefined;
     var out_len: usize = undefined;
-    const create_result = blip_archive_create(&c_files, 1, 0, &out_buf, &out_len);
+    const create_result = blar_create(&c_files, 1, 0, &out_buf, &out_len);
     try std.testing.expectEqual(@as(i32, 0), create_result);
     defer blip_free(out_buf, out_len);
 
-    try std.testing.expect(blip_archive_verify(out_buf, out_len));
+    try std.testing.expect(blar_verify(out_buf, out_len));
 
     const slice = out_buf[0..out_len];
     const mid = out_len / 2;
     const original = slice[mid];
     slice[mid] = original ^ 0xFF;
-    _ = blip_archive_verify(out_buf, out_len);
+    _ = blar_verify(out_buf, out_len);
     slice[mid] = original;
 }
 
@@ -3233,7 +3233,7 @@ test "C FFI: blip_free frees allocated memory" {
     const c_files = [_]CFileEntry{};
     var out_buf: [*]u8 = undefined;
     var out_len: usize = undefined;
-    const result = blip_archive_create(&c_files, 0, 0, &out_buf, &out_len);
+    const result = blar_create(&c_files, 0, 0, &out_buf, &out_len);
     try std.testing.expectEqual(@as(i32, 0), result);
     blip_free(out_buf, out_len);
 }
@@ -3264,73 +3264,73 @@ test "C FFI: containerErrorCode maps all ContainerError variants" {
     try std.testing.expectEqual(@as(i32, -12), containerErrorCode(error.Overflow));
 }
 
-test "C FFI: blip_archive_file_path returns correct paths" {
+test "C FFI: blar_file_path returns correct paths" {
     const c_files = [_]CFileEntry{
         .{ .path = "alpha.txt", .path_len = 9, .content = "aaa", .content_len = 3 },
         .{ .path = "beta.txt", .path_len = 8, .content = "bbb", .content_len = 3 },
     };
     var out_buf: [*]u8 = undefined;
     var out_len: usize = undefined;
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_create(&c_files, 2, 0, &out_buf, &out_len));
+    try std.testing.expectEqual(@as(i32, 0), blar_create(&c_files, 2, 0, &out_buf, &out_len));
     defer blip_free(out_buf, out_len);
 
     var path_ptr: [*]const u8 = undefined;
     var path_len: usize = undefined;
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_file_path(out_buf, out_len, 0, &path_ptr, &path_len));
+    try std.testing.expectEqual(@as(i32, 0), blar_file_path(out_buf, out_len, 0, &path_ptr, &path_len));
     try std.testing.expectEqualSlices(u8, "alpha.txt", path_ptr[0..path_len]);
 
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_file_path(out_buf, out_len, 1, &path_ptr, &path_len));
+    try std.testing.expectEqual(@as(i32, 0), blar_file_path(out_buf, out_len, 1, &path_ptr, &path_len));
     try std.testing.expectEqualSlices(u8, "beta.txt", path_ptr[0..path_len]);
 
-    try std.testing.expectEqual(@as(i32, -8), blip_archive_file_path(out_buf, out_len, 2, &path_ptr, &path_len));
+    try std.testing.expectEqual(@as(i32, -8), blar_file_path(out_buf, out_len, 2, &path_ptr, &path_len));
 }
 
-test "C FFI: blip_archive_file_content returns correct data" {
+test "C FFI: blar_file_content returns correct data" {
     const c_files = [_]CFileEntry{
         .{ .path = "test.txt", .path_len = 8, .content = "hello world", .content_len = 11 },
     };
     var out_buf: [*]u8 = undefined;
     var out_len: usize = undefined;
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_create(&c_files, 1, 0, &out_buf, &out_len));
+    try std.testing.expectEqual(@as(i32, 0), blar_create(&c_files, 1, 0, &out_buf, &out_len));
     defer blip_free(out_buf, out_len);
 
     var data_ptr: [*]u8 = undefined;
     var data_len: usize = undefined;
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_file_content(out_buf, out_len, 0, &data_ptr, &data_len));
+    try std.testing.expectEqual(@as(i32, 0), blar_file_content(out_buf, out_len, 0, &data_ptr, &data_len));
     defer blip_free_content(data_ptr, data_len);
     try std.testing.expectEqualSlices(u8, "hello world", data_ptr[0..data_len]);
 }
 
-test "C FFI: blip_archive_file_content_by_path finds file" {
+test "C FFI: blar_file_content_by_path finds file" {
     const c_files = [_]CFileEntry{
         .{ .path = "a.txt", .path_len = 5, .content = "aaa", .content_len = 3 },
         .{ .path = "b.txt", .path_len = 5, .content = "bbb", .content_len = 3 },
     };
     var out_buf: [*]u8 = undefined;
     var out_len: usize = undefined;
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_create(&c_files, 2, 0, &out_buf, &out_len));
+    try std.testing.expectEqual(@as(i32, 0), blar_create(&c_files, 2, 0, &out_buf, &out_len));
     defer blip_free(out_buf, out_len);
 
     var data_ptr: [*]u8 = undefined;
     var data_len: usize = undefined;
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_file_content_by_path(out_buf, out_len, "b.txt", 5, &data_ptr, &data_len));
+    try std.testing.expectEqual(@as(i32, 0), blar_file_content_by_path(out_buf, out_len, "b.txt", 5, &data_ptr, &data_len));
     try std.testing.expectEqualSlices(u8, "bbb", data_ptr[0..data_len]);
     blip_free_content(data_ptr, data_len);
 
-    try std.testing.expectEqual(@as(i32, -14), blip_archive_file_content_by_path(out_buf, out_len, "nope", 4, &data_ptr, &data_len));
+    try std.testing.expectEqual(@as(i32, -14), blar_file_content_by_path(out_buf, out_len, "nope", 4, &data_ptr, &data_len));
 }
 
-test "C FFI: blip_archive_file_verify checks per-file hash" {
+test "C FFI: blar_file_verify checks per-file hash" {
     const c_files = [_]CFileEntry{
         .{ .path = "test.txt", .path_len = 8, .content = "data", .content_len = 4 },
     };
     var out_buf: [*]u8 = undefined;
     var out_len: usize = undefined;
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_create(&c_files, 1, 0, &out_buf, &out_len));
+    try std.testing.expectEqual(@as(i32, 0), blar_create(&c_files, 1, 0, &out_buf, &out_len));
     defer blip_free(out_buf, out_len);
 
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_file_verify(out_buf, out_len, 0));
-    try std.testing.expectEqual(@as(i32, -8), blip_archive_file_verify(out_buf, out_len, 1));
+    try std.testing.expectEqual(@as(i32, 0), blar_file_verify(out_buf, out_len, 0));
+    try std.testing.expectEqual(@as(i32, -8), blar_file_verify(out_buf, out_len, 1));
 }
 
 test "C FFI: bzip2 compress+decompress multi-block archive" {
@@ -3360,7 +3360,7 @@ test "C FFI: bzip2 compress+decompress multi-block archive" {
     try std.testing.expectEqualSlices(u8, &data, dec_buf[0..dec_len]);
 }
 
-test "C FFI: blip_archive_create_full with FILE + DIR entries" {
+test "C FFI: blar_create_full with FILE + DIR entries" {
     const entries = [_]CArchiveEntry{
         .{
             .path = "mydir", .path_len = 5,
@@ -3409,17 +3409,17 @@ test "C FFI: blip_archive_create_full with FILE + DIR entries" {
     };
     var out_buf: [*]u8 = undefined;
     var out_len: usize = undefined;
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_create_full(&entries, 2, 0, 0, 0, null, null, null, &out_buf, &out_len));
+    try std.testing.expectEqual(@as(i32, 0), blar_create_full(&entries, 2, 0, 0, 0, null, null, null, &out_buf, &out_len));
     defer blip_free(out_buf, out_len);
 
     var count: u64 = undefined;
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_file_count(out_buf, out_len, &count));
+    try std.testing.expectEqual(@as(i32, 0), blar_file_count(out_buf, out_len, &count));
     try std.testing.expectEqual(@as(u64, 2), count);
 
-    try std.testing.expect(blip_archive_verify(out_buf, out_len));
+    try std.testing.expect(blar_verify(out_buf, out_len));
 }
 
-test "C FFI: blip_archive_entry_type returns FILE vs DIR" {
+test "C FFI: blar_entry_type returns FILE vs DIR" {
     const entries = [_]CArchiveEntry{
         .{
             .path = "adir", .path_len = 4,
@@ -3468,17 +3468,17 @@ test "C FFI: blip_archive_entry_type returns FILE vs DIR" {
     };
     var out_buf: [*]u8 = undefined;
     var out_len: usize = undefined;
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_create_full(&entries, 2, 0, 0, 0, null, null, null, &out_buf, &out_len));
+    try std.testing.expectEqual(@as(i32, 0), blar_create_full(&entries, 2, 0, 0, 0, null, null, null, &out_buf, &out_len));
     defer blip_free(out_buf, out_len);
 
     var out_type: u8 = undefined;
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_entry_type(out_buf, out_len, 0, &out_type));
+    try std.testing.expectEqual(@as(i32, 0), blar_entry_type(out_buf, out_len, 0, &out_type));
     try std.testing.expectEqual(@as(u8, 0x07), out_type); // DIR
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_entry_type(out_buf, out_len, 1, &out_type));
+    try std.testing.expectEqual(@as(i32, 0), blar_entry_type(out_buf, out_len, 1, &out_type));
     try std.testing.expectEqual(@as(u8, 0x05), out_type); // FILE
 }
 
-test "C FFI: blip_archive_entry_metadata returns metadata" {
+test "C FFI: blar_entry_metadata returns metadata" {
     const entries = [_]CArchiveEntry{
         .{
             .path = "script.sh", .path_len = 9,
@@ -3505,14 +3505,14 @@ test "C FFI: blip_archive_entry_metadata returns metadata" {
     };
     var out_buf: [*]u8 = undefined;
     var out_len: usize = undefined;
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_create_full(&entries, 1, 0, 0, 0, null, null, null, &out_buf, &out_len));
+    try std.testing.expectEqual(@as(i32, 0), blar_create_full(&entries, 1, 0, 0, 0, null, null, null, &out_buf, &out_len));
     defer blip_free(out_buf, out_len);
 
     var out_mode: u16 = undefined;
     var out_mtime_ns: i64 = undefined;
     var out_owner: [*]const u8 = undefined;
     var out_owner_len: usize = undefined;
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_entry_metadata(
+    try std.testing.expectEqual(@as(i32, 0), blar_entry_metadata(
         out_buf, out_len, 0, &out_mode, &out_mtime_ns, &out_owner, &out_owner_len,
     ));
     try std.testing.expectEqual(@as(u16, 0o755), out_mode);
@@ -3531,7 +3531,7 @@ test "C FFI: blip_peek navigates to known container" {
     };
     var out_buf: [*]u8 = undefined;
     var out_len: usize = undefined;
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_create(&c_files, 1, 0, &out_buf, &out_len));
+    try std.testing.expectEqual(@as(i32, 0), blar_create(&c_files, 1, 0, &out_buf, &out_len));
     defer blip_free(out_buf, out_len);
 
     // Empty path -> outer ARRAY
@@ -3565,7 +3565,7 @@ test "C FFI: blip_container_count returns correct count" {
     };
     var out_buf: [*]u8 = undefined;
     var out_len: usize = undefined;
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_create(&c_files, 2, 0, &out_buf, &out_len));
+    try std.testing.expectEqual(@as(i32, 0), blar_create(&c_files, 2, 0, &out_buf, &out_len));
     defer blip_free(out_buf, out_len);
 
     // Navigate to [1] (body array) and get count
@@ -3585,7 +3585,7 @@ test "C FFI: blip_container_hash returns correct hash bytes" {
     };
     var out_buf: [*]u8 = undefined;
     var out_len: usize = undefined;
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_create(&c_files, 1, 0, &out_buf, &out_len));
+    try std.testing.expectEqual(@as(i32, 0), blar_create(&c_files, 1, 0, &out_buf, &out_len));
     defer blip_free(out_buf, out_len);
 
     // Get hash of outer array — v2 uses BLAKE3-128 (16 bytes), containerHash returns first 8
@@ -3601,7 +3601,7 @@ test "C FFI: blip_container_key_at returns correct key" {
     };
     var out_buf: [*]u8 = undefined;
     var out_len: usize = undefined;
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_create(&c_files, 1, 0, &out_buf, &out_len));
+    try std.testing.expectEqual(@as(i32, 0), blar_create(&c_files, 1, 0, &out_buf, &out_len));
     defer blip_free(out_buf, out_len);
 
     // Navigate to [1][0][0] (metadata dict)
@@ -3653,7 +3653,7 @@ test "C FFI: blip_peek_display returns type for .type accessor" {
     };
     var out_buf: [*]u8 = undefined;
     var out_len: usize = undefined;
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_create(&c_files, 1, 0, &out_buf, &out_len));
+    try std.testing.expectEqual(@as(i32, 0), blar_create(&c_files, 1, 0, &out_buf, &out_len));
     defer blip_free(out_buf, out_len);
 
     var stdout_ptr: [*]const u8 = undefined;
@@ -3675,7 +3675,7 @@ test "C FFI: blip_peek_display with json flag" {
     };
     var out_buf: [*]u8 = undefined;
     var out_len: usize = undefined;
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_create(&c_files, 1, 0, &out_buf, &out_len));
+    try std.testing.expectEqual(@as(i32, 0), blar_create(&c_files, 1, 0, &out_buf, &out_len));
     defer blip_free(out_buf, out_len);
 
     var stdout_ptr: [*]const u8 = undefined;
@@ -3698,7 +3698,7 @@ test "C FFI: blip_peek_display returns error for invalid path" {
     };
     var out_buf: [*]u8 = undefined;
     var out_len: usize = undefined;
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_create(&c_files, 1, 0, &out_buf, &out_len));
+    try std.testing.expectEqual(@as(i32, 0), blar_create(&c_files, 1, 0, &out_buf, &out_len));
     defer blip_free(out_buf, out_len);
 
     var stdout_ptr: [*]const u8 = undefined;
@@ -3720,7 +3720,7 @@ test "C FFI: blip_peek_display hex flag" {
     };
     var out_buf: [*]u8 = undefined;
     var out_len: usize = undefined;
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_create(&c_files, 1, 0, &out_buf, &out_len));
+    try std.testing.expectEqual(@as(i32, 0), blar_create(&c_files, 1, 0, &out_buf, &out_len));
     defer blip_free(out_buf, out_len);
 
     // Navigate to [1][0][1] (DATA content), hex mode (0x04)
@@ -3745,7 +3745,7 @@ test "C FFI: blip_peek returns error for invalid path" {
     };
     var out_buf: [*]u8 = undefined;
     var out_len: usize = undefined;
-    try std.testing.expectEqual(@as(i32, 0), blip_archive_create(&c_files, 1, 0, &out_buf, &out_len));
+    try std.testing.expectEqual(@as(i32, 0), blar_create(&c_files, 1, 0, &out_buf, &out_len));
     defer blip_free(out_buf, out_len);
 
     var out_type: u8 = undefined;

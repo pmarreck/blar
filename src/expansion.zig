@@ -2,7 +2,7 @@
 //! formats into more compressible representations and reconstructing them.
 //!
 //! This module is the single entry point for all container format handling.
-//! The C layer (blar_common.h) calls blip_expand_file() and blip_collapse_container()
+//! The C layer (blar_common.h) calls blar_expand_file() and blar_collapse_container()
 //! through the FFI without implementing any format-specific logic itself.
 
 const std = @import("std");
@@ -841,7 +841,7 @@ fn collapseContainerById(
                 defer allocator.free(px);
 
                 // Refilter + zlib compress via FFI
-                // This requires blip_pdf_refilter + blip_zlib_compress which are C FFI.
+                // This requires blar_pdf_refilter + blar_zlib_compress which are C FFI.
                 // For now, skip FlateDecode reconstruction and rely on the C path.
                 // The shell already has the decompressed content, which is fine for
                 // most PDFs since we expanded FlateDecode streams in Phase 1.
@@ -884,7 +884,7 @@ fn collapseContainerById(
                 allocator.free(pdf_buf);
                 return rewritten;
             }
-            // Use blip_pdf_rewrite_streams for size-changing replacements
+            // Use blar_pdf_rewrite_streams for size-changing replacements
             // For now this is handled by the C path — the Zig path only handles
             // same-size JPEG replacements (which is the common case for lossless JPEG↔JXL)
         }

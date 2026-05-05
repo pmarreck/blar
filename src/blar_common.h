@@ -15,7 +15,7 @@
 #define _POSIX_C_SOURCE 200809L
 #endif
 
-#include "blip.h"
+#include "blar.h"
 
 #include <errno.h>
 #include <grp.h>
@@ -452,10 +452,10 @@ static const char *get_group_name(gid_t gid) {
     return gr ? gr->gr_name : NULL;
 }
 
-/* Populate a blip_archive_entry with metadata from a stat result.
+/* Populate a blar_entry with metadata from a stat result.
  * Fills in mode, mtime_ns, ctime_ns, birthtime_ns, uid, gid, owner, groupname.
  * The entry's path, content, and is_dir fields must be set by the caller. */
-static void fill_entry_metadata(blip_archive_entry *entry, const struct stat *st) {
+static void fill_entry_metadata(blar_entry *entry, const struct stat *st) {
     entry->mode = (uint16_t)(st->st_mode & 07777);
     entry->mtime_ns = get_mtime_ns(st);
     entry->ctime_ns = get_ctime_ns(st);
@@ -505,7 +505,7 @@ static void fill_entry_metadata(blip_archive_entry *entry, const struct stat *st
  * Returns 0 on success, -1 on error (errno set).
  * Caller must free returned buffers with free_file_xattrs(). */
 static int read_file_xattrs(const char *path,
-                             blip_xattr_entry **out_xattrs, size_t *out_count,
+                             blar_xattr_entry **out_xattrs, size_t *out_count,
                              uint8_t **out_resource_fork, size_t *out_resource_fork_len) {
     *out_xattrs = NULL;
     *out_count = 0;
@@ -542,7 +542,7 @@ static int read_file_xattrs(const char *path,
     }
 
     /* Allocate max possible (some may become resource_fork) */
-    blip_xattr_entry *xattrs = (blip_xattr_entry *)calloc(total, sizeof(blip_xattr_entry));
+    blar_xattr_entry *xattrs = (blar_xattr_entry *)calloc(total, sizeof(blar_xattr_entry));
     if (!xattrs) { free(name_buf); return -1; }
 
     size_t count = 0;
@@ -609,7 +609,7 @@ static int read_file_xattrs(const char *path,
 }
 
 /* Free xattr data returned by read_file_xattrs(). */
-static void free_file_xattrs(blip_xattr_entry *xattrs, size_t count,
+static void free_file_xattrs(blar_xattr_entry *xattrs, size_t count,
                                uint8_t *resource_fork) {
     if (xattrs) {
         for (size_t i = 0; i < count; i++) {
@@ -625,7 +625,7 @@ static void free_file_xattrs(blip_xattr_entry *xattrs, size_t count,
  * Writes resource fork as com.apple.ResourceFork on macOS.
  * Non-fatal: warns on stderr for individual failures. */
 static void write_file_xattrs(const char *path,
-                                const blip_xattr_entry *xattrs, size_t count,
+                                const blar_xattr_entry *xattrs, size_t count,
                                 const uint8_t *resource_fork, size_t resource_fork_len) {
 #ifdef HAVE_XATTR
     for (size_t i = 0; i < count; i++) {
@@ -696,8 +696,8 @@ static void cleanup_magic(void) {
 }
 
 static int mime_compare(const void *a, const void *b) {
-    const blip_archive_entry *ea = (const blip_archive_entry *)a;
-    const blip_archive_entry *eb = (const blip_archive_entry *)b;
+    const blar_entry *ea = (const blar_entry *)a;
+    const blar_entry *eb = (const blar_entry *)b;
     /* Directories first */
     if (ea->is_dir && !eb->is_dir) return -1;
     if (!ea->is_dir && eb->is_dir) return 1;
@@ -711,14 +711,14 @@ static int mime_compare(const void *a, const void *b) {
     return cmp != 0 ? cmp : strcmp(ea->path, eb->path);
 }
 
-static void mime_sort_entries(blip_archive_entry *entries, size_t count) {
+static void mime_sort_entries(blar_entry *entries, size_t count) {
     init_magic();
     if (!g_magic) return; /* graceful fallback */
-    qsort(entries, count, sizeof(blip_archive_entry), mime_compare);
+    qsort(entries, count, sizeof(blar_entry), mime_compare);
     cleanup_magic();
 }
 #else
-static void mime_sort_entries(blip_archive_entry *entries, size_t count) {
+static void mime_sort_entries(blar_entry *entries, size_t count) {
     (void)entries; (void)count;
 }
 #endif /* HAVE_LIBMAGIC */
@@ -1516,7 +1516,7 @@ static int blar_extract_to_dir(
     } while (0)
 
     uint64_t count = 0;
-    int32_t rc = blip_archive_file_count(buf, buf_len, &count);
+    int32_t rc = blar_file_count(buf, buf_len, &count);
     if (rc != BLIP_OK) {
         EXTRACT_LOG("extract: %s", blip_error_string(rc));
         return EXIT_IO;
@@ -1534,11 +1534,11 @@ static int blar_extract_to_dir(
     /* ── Pass 1: create directories, count bytes for progress ────────── */
     for (uint64_t i = 0; i < count; i++) {
         uint8_t entry_type = 0;
-        blip_archive_entry_type(buf, buf_len, i, &entry_type);
+        blar_entry_type(buf, buf_len, i, &entry_type);
 
         const char *path = NULL;
         size_t path_len = 0;
-        rc = blip_archive_file_path(buf, buf_len, i, &path, &path_len);
+        rc = blar_file_path(buf, buf_len, i, &path, &path_len);
         if (rc != BLIP_OK) {
             EXTRACT_LOG("extract: entry %llu: %s",
                     (unsigned long long)i, blip_error_string(rc));
@@ -1570,7 +1570,7 @@ static int blar_extract_to_dir(
             const char *co_type = NULL;
             size_t co_type_len = 0;
             bool is_container = false;
-            if (blip_archive_entry_container_type(buf, buf_len, i,
+            if (blar_entry_container_type(buf, buf_len, i,
                     &co_type, &co_type_len) == BLIP_OK && co_type != NULL) {
                 is_container = true;
                 /* Track this container for pass 3 */
@@ -1593,7 +1593,7 @@ static int blar_extract_to_dir(
                 for (size_t cci = 0; cci < container_count; cci++) {
                     const char *co_path = NULL;
                     size_t co_path_len = 0;
-                    if (blip_archive_file_path(buf, buf_len, container_indices[cci],
+                    if (blar_file_path(buf, buf_len, container_indices[cci],
                             &co_path, &co_path_len) == BLIP_OK) {
                         if (path_len > co_path_len + 1 &&
                             memcmp(path, co_path, co_path_len) == 0 &&
@@ -1612,7 +1612,7 @@ static int blar_extract_to_dir(
                 int64_t mtime_ns = 0;
                 const char *owner = NULL;
                 size_t owner_len = 0;
-                blip_archive_entry_metadata(buf, buf_len, i, &mode, &mtime_ns, &owner, &owner_len);
+                blar_entry_metadata(buf, buf_len, i, &mode, &mtime_ns, &owner, &owner_len);
 
                 if (!mkdirp(out_path)) {
                     EXTRACT_LOG("extract: cannot create directory '%s': %s",
@@ -1625,18 +1625,18 @@ static int blar_extract_to_dir(
                 }
 
                 /* Restore xattrs on directory */
-                blip_xattr_entry *dir_xattrs = NULL;
+                blar_xattr_entry *dir_xattrs = NULL;
                 size_t dir_xattr_count = 0;
                 uint8_t *dir_rfork = NULL;
                 size_t dir_rfork_len = 0;
-                if (blip_archive_entry_xattrs(buf, buf_len, i,
+                if (blar_entry_xattrs(buf, buf_len, i,
                         &dir_xattrs, &dir_xattr_count,
                         &dir_rfork, &dir_rfork_len) == BLIP_OK) {
                     if (dir_xattr_count > 0 || dir_rfork_len > 0) {
                         write_file_xattrs(out_path, dir_xattrs, dir_xattr_count,
                                            dir_rfork, dir_rfork_len);
                     }
-                    blip_free_xattrs(dir_xattrs, dir_xattr_count,
+                    blar_free_xattrs(dir_xattrs, dir_xattr_count,
                                       dir_rfork, dir_rfork_len);
                 }
             }
@@ -1656,7 +1656,7 @@ static int blar_extract_to_dir(
             /* FILE entry: count bytes for progress */
             uint8_t *data = NULL;
             size_t data_len = 0;
-            if (blip_archive_file_content(buf, buf_len, i, &data, &data_len) == BLIP_OK) {
+            if (blar_file_content(buf, buf_len, i, &data, &data_len) == BLIP_OK) {
                 total_bytes += data_len;
                 blip_free_content(data, data_len);
             }
@@ -1673,19 +1673,19 @@ static int blar_extract_to_dir(
     /* ── Pass 2: extract files (resilient — continue on per-file errors) */
     for (uint64_t i = 0; i < count; i++) {
         uint8_t entry_type = 0;
-        blip_archive_entry_type(buf, buf_len, i, &entry_type);
+        blar_entry_type(buf, buf_len, i, &entry_type);
         if (entry_type == 0x07) continue; /* skip DIR entries */
 
         const char *path = NULL;
         size_t path_len = 0;
-        rc = blip_archive_file_path(buf, buf_len, i, &path, &path_len);
+        rc = blar_file_path(buf, buf_len, i, &path, &path_len);
         if (rc == BLIP_OK) {
             /* Skip files belonging to a container DIR */
             bool in_container = false;
             for (size_t cci = 0; cci < container_count; cci++) {
                 const char *co_path = NULL;
                 size_t co_path_len = 0;
-                if (blip_archive_file_path(buf, buf_len, container_indices[cci],
+                if (blar_file_path(buf, buf_len, container_indices[cci],
                         &co_path, &co_path_len) == BLIP_OK) {
                     if (path_len > co_path_len + 1 &&
                         memcmp(path, co_path, co_path_len) == 0 &&
@@ -1697,7 +1697,7 @@ static int blar_extract_to_dir(
             }
             if (in_container) continue;
         }
-        rc = blip_archive_file_path(buf, buf_len, i, &path, &path_len);
+        rc = blar_file_path(buf, buf_len, i, &path, &path_len);
         if (rc != BLIP_OK) {
             EXTRACT_LOG("\033[31mERROR: entry %llu: cannot read path: %s\033[0m",
                     (unsigned long long)i, blip_error_string(rc));
@@ -1707,7 +1707,7 @@ static int blar_extract_to_dir(
 
         uint8_t *data = NULL;
         size_t data_len = 0;
-        rc = blip_archive_file_content(buf, buf_len, i, &data, &data_len);
+        rc = blar_file_content(buf, buf_len, i, &data, &data_len);
         if (rc != BLIP_OK) {
             EXTRACT_LOG("\033[31mERROR: skipping '%.*s': %s\033[0m",
                     (int)path_len, path, blip_error_string(rc));
@@ -1762,7 +1762,7 @@ static int blar_extract_to_dir(
         int64_t mtime_ns = 0;
         const char *owner = NULL;
         size_t owner_len = 0;
-        blip_archive_entry_metadata(buf, buf_len, i, &mode, &mtime_ns, &owner, &owner_len);
+        blar_entry_metadata(buf, buf_len, i, &mode, &mtime_ns, &owner, &owner_len);
 
         if (mode != 0) {
             chmod(out_path, mode);
@@ -1778,18 +1778,18 @@ static int blar_extract_to_dir(
         }
 
         /* Restore xattrs and resource fork */
-        blip_xattr_entry *file_xattrs = NULL;
+        blar_xattr_entry *file_xattrs = NULL;
         size_t file_xattr_count = 0;
         uint8_t *file_rfork = NULL;
         size_t file_rfork_len = 0;
-        if (blip_archive_entry_xattrs(buf, buf_len, i,
+        if (blar_entry_xattrs(buf, buf_len, i,
                 &file_xattrs, &file_xattr_count,
                 &file_rfork, &file_rfork_len) == BLIP_OK) {
             if (file_xattr_count > 0 || file_rfork_len > 0) {
                 write_file_xattrs(out_path, file_xattrs, file_xattr_count,
                                    file_rfork, file_rfork_len);
             }
-            blip_free_xattrs(file_xattrs, file_xattr_count,
+            blar_free_xattrs(file_xattrs, file_xattr_count,
                               file_rfork, file_rfork_len);
         }
 
@@ -1803,7 +1803,7 @@ static int blar_extract_to_dir(
         uint64_t co_idx = container_indices[ci];
         const char *co_path = NULL;
         size_t co_path_len = 0;
-        rc = blip_archive_file_path(buf, buf_len, co_idx, &co_path, &co_path_len);
+        rc = blar_file_path(buf, buf_len, co_idx, &co_path, &co_path_len);
         if (rc != BLIP_OK) {
             EXTRACT_LOG("\033[31mERROR: container %llu: cannot read path: %s\033[0m",
                     (unsigned long long)co_idx, blip_error_string(rc));
@@ -1814,7 +1814,7 @@ static int blar_extract_to_dir(
         /* Detect container type */
         const char *co_type = NULL;
         size_t co_type_len = 0;
-        blip_archive_entry_container_type(buf, buf_len, co_idx, &co_type, &co_type_len);
+        blar_entry_container_type(buf, buf_len, co_idx, &co_type, &co_type_len);
 
         /* Look up codec in registry; warn if unknown */
         const blar_codec_t *codec = co_type
@@ -1866,7 +1866,7 @@ static int blar_extract_to_dir(
                 for (uint64_t j = 0; j < count; j++) {
                     if (j == co_idx) continue;
                     const char *j_path = NULL; size_t j_path_len = 0;
-                    if (blip_archive_file_path(buf, buf_len, j, &j_path, &j_path_len) != BLIP_OK) continue;
+                    if (blar_file_path(buf, buf_len, j, &j_path, &j_path_len) != BLIP_OK) continue;
                     if (j_path_len <= co_path_len + 1 ||
                         memcmp(j_path, co_path, co_path_len) != 0 ||
                         j_path[co_path_len] != '/')
@@ -1875,7 +1875,7 @@ static int blar_extract_to_dir(
                     size_t inner_len = j_path_len - co_path_len - 1;
 
                     uint8_t *j_content = NULL; size_t j_content_len = 0;
-                    rc = blip_archive_file_content(buf, buf_len, j, &j_content, &j_content_len);
+                    rc = blar_file_content(buf, buf_len, j, &j_content, &j_content_len);
                     if (rc != BLIP_OK) continue;
 
                     if (child_n >= child_cap) {
@@ -1902,25 +1902,25 @@ static int blar_extract_to_dir(
                     child_jxl_srcs[child_n] = "";
                     child_jxl_src_lens[child_n] = 0;
 
-                    blip_archive_entry_pdf_offset(buf, buf_len, j, &child_pdf_offs[child_n]);
-                    blip_archive_entry_pdf_length(buf, buf_len, j, &child_pdf_lens[child_n]);
+                    blar_entry_pdf_offset(buf, buf_len, j, &child_pdf_offs[child_n]);
+                    blar_entry_pdf_length(buf, buf_len, j, &child_pdf_lens[child_n]);
                     {
                         const char *js = NULL; size_t js_len = 0;
-                        blip_archive_entry_jxl_source(buf, buf_len, j, &js, &js_len);
+                        blar_entry_jxl_source(buf, buf_len, j, &js, &js_len);
                         if (js) { child_jxl_srcs[child_n] = js; child_jxl_src_lens[child_n] = js_len; }
                     }
                     {
                         uint16_t zc = 0xFFFF;
-                        blip_archive_entry_zip_comp(buf, buf_len, j, &zc);
+                        blar_entry_zip_comp(buf, buf_len, j, &zc);
                         child_zip_comps[child_n] = zc;
                     }
                     child_n++;
                     /* Note: flate metadata (predictor/columns/colors/bpc) is passed
-                     * through the blip_collapse_container FFI via CollapseChild fields */
+                     * through the blar_collapse_container FFI via CollapseChild fields */
                 }
 
                 uint8_t *result_data = NULL; size_t result_len = 0;
-                int collapse_rc = blip_collapse_container(
+                int collapse_rc = blar_collapse_container(
                     co_type, co_type_len,
                     child_n,
                     child_paths_arr, child_path_lens_arr,
@@ -1959,7 +1959,7 @@ static int blar_extract_to_dir(
                 /* Restore metadata */
                 uint16_t co_mode = 0; int64_t co_mtime_ns = 0;
                 const char *co_owner = NULL; size_t co_owner_len = 0;
-                blip_archive_entry_metadata(buf, buf_len, co_idx, &co_mode, &co_mtime_ns, &co_owner, &co_owner_len);
+                blar_entry_metadata(buf, buf_len, co_idx, &co_mode, &co_mtime_ns, &co_owner, &co_owner_len);
                 if (co_mode != 0) chmod(out_path, co_mode);
                 if (co_mtime_ns != 0) {
                     struct timespec times[2];
@@ -1967,11 +1967,11 @@ static int blar_extract_to_dir(
                     times[1].tv_sec = co_mtime_ns / 1000000000LL; times[1].tv_nsec = co_mtime_ns % 1000000000LL;
                     utimensat(AT_FDCWD, out_path, times, 0);
                 }
-                blip_xattr_entry *co_xattrs = NULL; size_t co_xattr_count = 0;
+                blar_xattr_entry *co_xattrs = NULL; size_t co_xattr_count = 0;
                 uint8_t *co_rfork = NULL; size_t co_rfork_len = 0;
-                if (blip_archive_entry_xattrs(buf, buf_len, co_idx, &co_xattrs, &co_xattr_count, &co_rfork, &co_rfork_len) == BLIP_OK) {
+                if (blar_entry_xattrs(buf, buf_len, co_idx, &co_xattrs, &co_xattr_count, &co_rfork, &co_rfork_len) == BLIP_OK) {
                     if (co_xattr_count > 0 || co_rfork_len > 0) write_file_xattrs(out_path, co_xattrs, co_xattr_count, co_rfork, co_rfork_len);
-                    blip_free_xattrs(co_xattrs, co_xattr_count, co_rfork, co_rfork_len);
+                    blar_free_xattrs(co_xattrs, co_xattr_count, co_rfork, co_rfork_len);
                 }
                 files_done++;
                 if (progress_fn) progress_fn(files_done, bytes_done, file_entries, total_bytes, callback_ctx);
@@ -1990,13 +1990,13 @@ static int blar_extract_to_dir(
                 if (j == co_idx) continue;
                 const char *j_path = NULL;
                 size_t j_path_len = 0;
-                if (blip_archive_file_path(buf, buf_len, j, &j_path, &j_path_len) != BLIP_OK)
+                if (blar_file_path(buf, buf_len, j, &j_path, &j_path_len) != BLIP_OK)
                     continue;
                 /* Check: {co_path}/__body__ */
                 if (j_path_len == co_path_len + 9 &&
                     memcmp(j_path, co_path, co_path_len) == 0 &&
                     memcmp(j_path + co_path_len, "/__body__", 9) == 0) {
-                    rc = blip_archive_file_content(buf, buf_len, j, &shell_data, &shell_len);
+                    rc = blar_file_content(buf, buf_len, j, &shell_data, &shell_len);
                     if (rc == BLIP_OK) found_body = true;
                     break;
                 }
@@ -2035,7 +2035,7 @@ static int blar_extract_to_dir(
                 if (j == co_idx) continue;
                 const char *j_path = NULL;
                 size_t j_path_len = 0;
-                if (blip_archive_file_path(buf, buf_len, j, &j_path, &j_path_len) != BLIP_OK)
+                if (blar_file_path(buf, buf_len, j, &j_path, &j_path_len) != BLIP_OK)
                     continue;
                 if (j_path_len <= co_path_len + 1 ||
                     memcmp(j_path, co_path, co_path_len) != 0 ||
@@ -2051,14 +2051,14 @@ static int blar_extract_to_dir(
                 /* Check jxl_source_format to determine handling */
                 const char *jx_fmt = NULL;
                 size_t jx_fmt_len = 0;
-                blip_archive_entry_jxl_source(buf, buf_len, j, &jx_fmt, &jx_fmt_len);
+                blar_entry_jxl_source(buf, buf_len, j, &jx_fmt, &jx_fmt_len);
 
                 bool is_flate = (jx_fmt && jx_fmt_len == 5 && memcmp(jx_fmt, "flate", 5) == 0);
 
                 /* Read po (offset) and pl (length) metadata */
                 uint64_t po = UINT64_MAX, pl = UINT64_MAX;
-                blip_archive_entry_pdf_offset(buf, buf_len, j, &po);
-                blip_archive_entry_pdf_length(buf, buf_len, j, &pl);
+                blar_entry_pdf_offset(buf, buf_len, j, &po);
+                blar_entry_pdf_length(buf, buf_len, j, &pl);
                 if (po == UINT64_MAX || pl == UINT64_MAX) {
                     EXTRACT_LOG("\033[31mERROR: PDF container '%.*s': image '%.*s' missing po/pl metadata\033[0m",
                             (int)co_path_len, co_path, (int)inner_len, inner);
@@ -2069,7 +2069,7 @@ static int blar_extract_to_dir(
                 /* Read JXL content */
                 uint8_t *jxl_data = NULL;
                 size_t jxl_len = 0;
-                rc = blip_archive_file_content(buf, buf_len, j, &jxl_data, &jxl_len);
+                rc = blar_file_content(buf, buf_len, j, &jxl_data, &jxl_len);
                 if (rc != BLIP_OK) {
                     EXTRACT_LOG("\033[31mERROR: PDF container '%.*s': cannot read '%.*s': %s\033[0m",
                             (int)co_path_len, co_path, (int)inner_len, inner, blip_error_string(rc));
@@ -2082,7 +2082,7 @@ static int blar_extract_to_dir(
                     uint8_t *pixels = NULL;
                     size_t pixels_len = 0;
                     uint32_t px_w = 0, px_h = 0, px_ch = 0, px_bps = 0;
-                    rc = blip_jxl_to_pixels(jxl_data, jxl_len, &pixels, &pixels_len,
+                    rc = blar_jxl_to_pixels(jxl_data, jxl_len, &pixels, &pixels_len,
                                             &px_w, &px_h, &px_ch, &px_bps);
                     blip_free_content(jxl_data, jxl_len);
                     if (rc != BLIP_OK) {
@@ -2101,7 +2101,7 @@ static int blar_extract_to_dir(
                     /* Refilter pixels */
                     uint8_t *filtered = NULL;
                     size_t filtered_len = 0;
-                    rc = blip_pdf_refilter(pixels, pixels_len, columns, colors, bpc, predictor,
+                    rc = blar_pdf_refilter(pixels, pixels_len, columns, colors, bpc, predictor,
                                            &filtered, &filtered_len);
                     blip_free(pixels, pixels_len);
                     if (rc != BLIP_OK) {
@@ -2114,7 +2114,7 @@ static int blar_extract_to_dir(
                     /* Zlib compress */
                     uint8_t *compressed = NULL;
                     size_t compressed_len = 0;
-                    rc = blip_zlib_compress(filtered, filtered_len, &compressed, &compressed_len);
+                    rc = blar_zlib_compress(filtered, filtered_len, &compressed, &compressed_len);
                     blip_free(filtered, filtered_len);
                     if (rc != BLIP_OK) {
                         EXTRACT_LOG("\033[31mERROR: PDF container '%.*s': zlib compress failed for '%.*s'\033[0m",
@@ -2150,7 +2150,7 @@ static int blar_extract_to_dir(
                     /* JPEG: JXL -> JPEG (bit-exact, same size) */
                     uint8_t *jpeg_data = NULL;
                     size_t jpeg_len = 0;
-                    rc = blip_jxl_to_jpeg(jxl_data, jxl_len, &jpeg_data, &jpeg_len);
+                    rc = blar_jxl_to_jpeg(jxl_data, jxl_len, &jpeg_data, &jpeg_len);
                     blip_free_content(jxl_data, jxl_len);
                     if (rc != BLIP_OK) {
                         EXTRACT_LOG("\033[31mERROR: PDF container '%.*s': JXL decode failed for '%.*s'\033[0m",
@@ -2185,7 +2185,7 @@ static int blar_extract_to_dir(
             if (pdf_ok && need_rewrite && flate_n > 0) {
                 uint8_t *rewritten = NULL;
                 size_t rewritten_len = 0;
-                rc = blip_pdf_rewrite_streams(pdf_buf, shell_len, flate_n,
+                rc = blar_pdf_rewrite_streams(pdf_buf, shell_len, flate_n,
                     fl_starts, fl_orig_lens,
                     (const uint8_t *const *)fl_new_datas, fl_new_lens,
                     &rewritten, &rewritten_len);
@@ -2230,7 +2230,7 @@ static int blar_extract_to_dir(
             {
                 uint64_t cs_count = 0;
                 uint64_t *cs_offs = NULL, *cs_lens = NULL;
-                if (blip_pdf_content_streams(pdf_buf, shell_len, &cs_count,
+                if (blar_pdf_content_streams(pdf_buf, shell_len, &cs_count,
                         &cs_offs, &cs_lens) == BLIP_OK && cs_count > 0)
                 {
                     size_t cs_rep_n = 0;
@@ -2248,7 +2248,7 @@ static int blar_extract_to_dir(
                                 continue;
                             uint8_t *compressed = NULL;
                             size_t compressed_len = 0;
-                            if (blip_zlib_compress(sdata, slen,
+                            if (blar_zlib_compress(sdata, slen,
                                     &compressed, &compressed_len) == BLIP_OK)
                             {
                                 cs_starts[cs_rep_n] = cs_offs[csi];
@@ -2262,7 +2262,7 @@ static int blar_extract_to_dir(
                         if (cs_rep_n > 0) {
                             uint8_t *recomp = NULL;
                             size_t recomp_len = 0;
-                            int32_t cs_rc = blip_pdf_rewrite_streams(pdf_buf, shell_len,
+                            int32_t cs_rc = blar_pdf_rewrite_streams(pdf_buf, shell_len,
                                 cs_rep_n, cs_starts, cs_orig,
                                 (const uint8_t *const *)cs_datas, cs_sizes,
                                 &recomp, &recomp_len);
@@ -2332,7 +2332,7 @@ static int blar_extract_to_dir(
             int64_t co_mtime_ns = 0;
             const char *co_owner = NULL;
             size_t co_owner_len = 0;
-            blip_archive_entry_metadata(buf, buf_len, co_idx, &co_mode, &co_mtime_ns, &co_owner, &co_owner_len);
+            blar_entry_metadata(buf, buf_len, co_idx, &co_mode, &co_mtime_ns, &co_owner, &co_owner_len);
             if (co_mode != 0) chmod(out_path, co_mode);
             if (co_mtime_ns != 0) {
                 struct timespec times[2];
@@ -2343,16 +2343,16 @@ static int blar_extract_to_dir(
                 utimensat(AT_FDCWD, out_path, times, 0);
             }
 
-            blip_xattr_entry *co_xattrs = NULL;
+            blar_xattr_entry *co_xattrs = NULL;
             size_t co_xattr_count = 0;
             uint8_t *co_rfork = NULL;
             size_t co_rfork_len = 0;
-            if (blip_archive_entry_xattrs(buf, buf_len, co_idx,
+            if (blar_entry_xattrs(buf, buf_len, co_idx,
                     &co_xattrs, &co_xattr_count,
                     &co_rfork, &co_rfork_len) == BLIP_OK) {
                 if (co_xattr_count > 0 || co_rfork_len > 0)
                     write_file_xattrs(out_path, co_xattrs, co_xattr_count, co_rfork, co_rfork_len);
-                blip_free_xattrs(co_xattrs, co_xattr_count, co_rfork, co_rfork_len);
+                blar_free_xattrs(co_xattrs, co_xattr_count, co_rfork, co_rfork_len);
             }
 
             files_done++;
@@ -2376,7 +2376,7 @@ static int blar_extract_to_dir(
 /* ── Entry collection for create ──────────────────────────────────────── */
 
 typedef struct {
-    blip_archive_entry *entries;
+    blar_entry *entries;
     size_t count;
     size_t capacity;
     uint8_t **content_bufs; /* owned content buffers to free */
@@ -2410,10 +2410,10 @@ static void entry_list_init(entry_list_t *el) {
     el->metadata_only = false;
 }
 
-static bool entry_list_add(entry_list_t *el, blip_archive_entry entry) {
+static bool entry_list_add(entry_list_t *el, blar_entry entry) {
     if (el->count >= el->capacity) {
         size_t new_cap = el->capacity == 0 ? 64 : el->capacity * 2;
-        blip_archive_entry *new_entries = realloc(el->entries, new_cap * sizeof(blip_archive_entry));
+        blar_entry *new_entries = realloc(el->entries, new_cap * sizeof(blar_entry));
         if (!new_entries) return false;
         el->entries = new_entries;
         el->capacity = new_cap;
@@ -2519,7 +2519,7 @@ static void *jxl_transcode_worker(void *arg) {
         if (i >= ctx->jpeg_count) break;
         uint8_t *jxl_data = NULL;
         size_t jxl_len = 0;
-        if (blip_jxl_from_jpeg(ctx->content + ctx->offsets[i],
+        if (blar_jxl_from_jpeg(ctx->content + ctx->offsets[i],
                 (size_t)ctx->lengths[i], &jxl_data, &jxl_len) == BLIP_OK) {
             ctx->jxl_bufs[i] = jxl_data;
             ctx->jxl_lens[i] = jxl_len;
@@ -2595,98 +2595,98 @@ static const blar_codec_t builtin_codecs[] = {
     {
         .name       = "pdf",
         .extensions = pdf_extensions,
-        .detect     = blip_is_pdf,
+        .detect     = blar_is_pdf,
         .expand     = NULL,
         .collapse   = NULL,
     },
     {
         .name       = "png",
         .extensions = png_extensions,
-        .detect     = blip_is_png,
+        .detect     = blar_is_png,
         .expand     = NULL,
         .collapse   = NULL,
     },
     {
         .name       = "nifti",
         .extensions = nifti_extensions,
-        .detect     = blip_is_nifti,
+        .detect     = blar_is_nifti,
         .expand     = NULL,
         .collapse   = NULL,
     },
     {
         .name       = "dicom",
         .extensions = dicom_extensions,
-        .detect     = blip_is_dicom,
+        .detect     = blar_is_dicom,
         .expand     = NULL,
         .collapse   = NULL,
     },
     {
         .name       = "fits",
         .extensions = fits_extensions,
-        .detect     = blip_is_fits,
+        .detect     = blar_is_fits,
         .expand     = NULL,
         .collapse   = NULL,
     },
     {
         .name       = "aiff",
         .extensions = aiff_extensions,
-        .detect     = blip_is_aiff,
+        .detect     = blar_is_aiff,
         .expand     = NULL,
         .collapse   = NULL,
     },
     {
         .name       = "wav",
         .extensions = wav_extensions,
-        .detect     = blip_is_wav,
+        .detect     = blar_is_wav,
         .expand     = NULL,
         .collapse   = NULL,
     },
     {
         .name       = "tga",
         .extensions = tga_extensions,
-        .detect     = blip_is_tga,
+        .detect     = blar_is_tga,
         .expand     = NULL,
         .collapse   = NULL,
     },
     {
         .name       = "gif",
         .extensions = gif_extensions,
-        .detect     = blip_is_gif,
+        .detect     = blar_is_gif,
         .expand     = NULL,
         .collapse   = NULL,
     },
     {
         .name       = "tiff",
         .extensions = tiff_extensions,
-        .detect     = blip_is_tiff,
+        .detect     = blar_is_tiff,
         .expand     = NULL,
         .collapse   = NULL,
     },
     {
         .name       = "tar",
         .extensions = tar_extensions,
-        .detect     = blip_is_tar,
+        .detect     = blar_is_tar,
         .expand     = NULL,
         .collapse   = NULL,
     },
     {
         .name       = "bmp",
         .extensions = bmp_extensions,
-        .detect     = blip_is_bmp,
+        .detect     = blar_is_bmp,
         .expand     = NULL,
         .collapse   = NULL,
     },
     {
         .name       = "gz",
         .extensions = gz_extensions,
-        .detect     = blip_is_gz,
+        .detect     = blar_is_gz,
         .expand     = NULL,
         .collapse   = NULL,
     },
     {
         .name       = "zip",
         .extensions = zip_extensions,
-        .detect     = blip_is_zip,
+        .detect     = blar_is_zip,
         .expand     = NULL,
         .collapse   = NULL,
     },
@@ -2734,14 +2734,14 @@ static bool collect_entries_metadata_recurse(const char *path, entry_list_t *el)
     if (!entry_list_add_content(el, (uint8_t *)owned_path)) { free(owned_path); return false; }
 
     if (S_ISDIR(st.st_mode)) {
-        blip_archive_entry entry;
+        blar_entry entry;
         memset(&entry, 0, sizeof(entry));
         entry.path = owned_path;
         entry.path_len = strlen(owned_path);
         entry.is_dir = 1;
         fill_entry_metadata(&entry, &st);
         /* Read xattrs */
-        blip_xattr_entry *xa = NULL; size_t xa_count = 0;
+        blar_xattr_entry *xa = NULL; size_t xa_count = 0;
         uint8_t *rfork = NULL; size_t rfork_len = 0;
         read_file_xattrs(path, &xa, &xa_count, &rfork, &rfork_len);
         entry.xattrs = xa; entry.xattr_count = xa_count;
@@ -2760,7 +2760,7 @@ static bool collect_entries_metadata_recurse(const char *path, entry_list_t *el)
         if (!disk_path) return false;
         if (!entry_list_add_content(el, (uint8_t *)disk_path)) { free(disk_path); return false; }
 
-        blip_archive_entry entry;
+        blar_entry entry;
         memset(&entry, 0, sizeof(entry));
         entry.path = owned_path;
         entry.path_len = strlen(owned_path);
@@ -2771,7 +2771,7 @@ static bool collect_entries_metadata_recurse(const char *path, entry_list_t *el)
         entry.source_path_len = strlen(disk_path);
         fill_entry_metadata(&entry, &st);
         /* Read xattrs */
-        blip_xattr_entry *xa = NULL; size_t xa_count = 0;
+        blar_xattr_entry *xa = NULL; size_t xa_count = 0;
         uint8_t *rfork = NULL; size_t rfork_len = 0;
         read_file_xattrs(path, &xa, &xa_count, &rfork, &rfork_len);
         entry.xattrs = xa; entry.xattr_count = xa_count;
@@ -2790,7 +2790,7 @@ static bool collect_entries_metadata_recurse(const char *path, entry_list_t *el)
 }
 
 
-static bool expand_via_zig(entry_list_t *el, const uint8_t *content, size_t content_len, const blip_archive_entry *file_entry, const blar_codec_t *codec);
+static bool expand_via_zig(entry_list_t *el, const uint8_t *content, size_t content_len, const blar_entry *file_entry, const blar_codec_t *codec);
 
 static bool collect_entries_recurse(const char *path, entry_list_t *el);
 
@@ -2857,7 +2857,7 @@ static bool collect_entries_recurse(const char *path, entry_list_t *el) {
     while (op_len > 0 && owned_path[op_len - 1] == '/') owned_path[--op_len] = '\0';
 
     if (S_ISDIR(st.st_mode)) {
-        blip_archive_entry entry;
+        blar_entry entry;
         memset(&entry, 0, sizeof(entry));
         entry.path = owned_path;
         entry.path_len = strlen(owned_path);
@@ -2866,7 +2866,7 @@ static bool collect_entries_recurse(const char *path, entry_list_t *el) {
         memset(entry.xh64, 0, 8);
 
         /* Read xattrs (dirs don't have resource forks) */
-        blip_xattr_entry *xa = NULL;
+        blar_xattr_entry *xa = NULL;
         size_t xa_count = 0;
         uint8_t *rfork = NULL;
         size_t rfork_len = 0;
@@ -2926,7 +2926,7 @@ static bool collect_entries_recurse(const char *path, entry_list_t *el) {
             }
         }
 
-        blip_archive_entry entry;
+        blar_entry entry;
         memset(&entry, 0, sizeof(entry));
         entry.path = owned_path;
         entry.path_len = strlen(owned_path);
@@ -2938,7 +2938,7 @@ static bool collect_entries_recurse(const char *path, entry_list_t *el) {
         fill_entry_metadata(&entry, &st);
 
         /* Read xattrs and resource fork */
-        blip_xattr_entry *xa = NULL;
+        blar_xattr_entry *xa = NULL;
         size_t xa_count = 0;
         uint8_t *rfork = NULL;
         size_t rfork_len = 0;
@@ -2979,7 +2979,7 @@ static bool collect_entries_recurse(const char *path, entry_list_t *el) {
 /* Worker context for parallel container expansion */
 typedef struct {
     size_t index;                        /* index in main entry list */
-    blip_archive_entry entry_copy;       /* copy of the original entry */
+    blar_entry entry_copy;       /* copy of the original entry */
     const uint8_t *content;              /* pointer to file content */
     size_t content_len;
     const blar_codec_t *codec;           /* detected codec */
@@ -3019,12 +3019,12 @@ static void *expand_worker(void *arg) {
 
 /* Bridge: try Zig expansion first, fall back to C expand function.
  * This is the transition layer — formats migrated to expansion.zig go through
- * blip_expand_file(), others still use their C expand_*_container() function. */
+ * blar_expand_file(), others still use their C expand_*_container() function. */
 
 
 static bool expand_via_zig(entry_list_t *el,
                                  const uint8_t *content, size_t content_len,
-                                 const blip_archive_entry *file_entry,
+                                 const blar_entry *file_entry,
                                  const blar_codec_t *codec) {
     /* ALL formats go through Zig core expansion */
     {
@@ -3043,7 +3043,7 @@ static bool expand_via_zig(entry_list_t *el,
         uint64_t *pdf_offsets = NULL;
         uint64_t *pdf_lengths = NULL;
 
-        int rc = blip_expand_file(
+        int rc = blar_expand_file(
             content, content_len,
             codec->name, strlen(codec->name),
             &count,
@@ -3060,7 +3060,7 @@ static bool expand_via_zig(entry_list_t *el,
 
         /* Build entry list from Zig expansion results */
         /* Container DIR entry */
-        blip_archive_entry dir_entry;
+        blar_entry dir_entry;
         memset(&dir_entry, 0, sizeof(dir_entry));
         dir_entry.path = file_entry->path;
         dir_entry.path_len = file_entry->path_len;
@@ -3109,7 +3109,7 @@ static bool expand_via_zig(entry_list_t *el,
                 if (!entry_list_add_content(el, child_content)) return false;
             }
 
-            blip_archive_entry child_ent;
+            blar_entry child_ent;
             memset(&child_ent, 0, sizeof(child_ent));
             child_ent.path = child_path;
             child_ent.path_len = child_path_len;

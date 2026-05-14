@@ -226,7 +226,7 @@ fn makeTestDicom(allocator: Allocator, width: u16, height: u16, bitsAlloc: u16) 
     const pixel_size: u32 = @as(u32, width) * @as(u32, height) * @as(u32, @intCast(bps));
 
     // Preamble(128) + DICM(4) + meta elements + image elements + pixel data
-    var buf_list = std.ArrayListUnmanaged(u8){};
+    var buf_list: std.ArrayListUnmanaged(u8) = .empty;
 
     // 128-byte preamble
     try buf_list.appendNTimes(allocator, 0, 128);

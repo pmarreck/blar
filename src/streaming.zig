@@ -173,7 +173,7 @@ pub fn createArchiveStreaming(
         std.fs.cwd().deleteFile(spill_path) catch {};
     }
 
-    var spill_index = std.ArrayList(SpillEntry){};
+    var spill_index: std.ArrayList(SpillEntry) = .empty;
     defer spill_index.deinit(allocator);
 
     // Track file hashes for Merkle computation
@@ -267,7 +267,7 @@ pub fn createArchiveStreaming(
     }
 
     // Flatten slots into final entry list
-    var work_entries = std.ArrayList(ArchiveEntry){};
+    var work_entries: std.ArrayList(ArchiveEntry) = .empty;
     defer work_entries.deinit(allocator);
 
     for (slots) |*slot| {
@@ -288,7 +288,7 @@ pub fn createArchiveStreaming(
     for (final_entries, 0..) |entry, i| {
         switch (entry) {
             .file => |file| {
-                    var to_free: std.ArrayList([]u8) = .{};
+                    var to_free: std.ArrayList([]u8) = .empty;
                     defer {
                         for (to_free.items) |item| allocator.free(item);
                         to_free.deinit(allocator);
@@ -375,7 +375,7 @@ pub fn createArchiveStreaming(
             }
         }
 
-        var to_free: std.ArrayList([]u8) = .{};
+        var to_free: std.ArrayList([]u8) = .empty;
         defer {
             for (to_free.items) |item| allocator.free(item);
             to_free.deinit(allocator);

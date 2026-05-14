@@ -135,11 +135,11 @@ pub fn rewritePdfWithStreams(allocator: Allocator, shell: []const u8, replacemen
     }.cmp);
 
     // Build the rewritten PDF body (everything up to xref)
-    var out: std.ArrayListUnmanaged(u8) = .{};
+    var out: std.ArrayListUnmanaged(u8) = .empty;
     errdefer out.deinit(allocator);
 
     // Track delta points for xref offset adjustment
-    var delta_points: std.ArrayListUnmanaged(DeltaPoint) = .{};
+    var delta_points: std.ArrayListUnmanaged(DeltaPoint) = .empty;
     defer delta_points.deinit(allocator);
 
     var shell_pos: usize = 0;
@@ -389,7 +389,7 @@ fn findJpegStreamsViaXref(allocator: Allocator, data: []const u8) ![]PdfJpegStre
     try parseXrefAt(allocator, data, xref_offset, &entries);
 
     // Visit each in-use entry and check for JPEG images
-    var streams: std.ArrayListUnmanaged(PdfJpegStream) = .{};
+    var streams: std.ArrayListUnmanaged(PdfJpegStream) = .empty;
     errdefer streams.deinit(allocator);
 
     var it = entries.iterator();
@@ -519,7 +519,7 @@ fn parseXrefStream(allocator: Allocator, data: []const u8, start: usize, entries
     var stream_length: ?u32 = null;
     var prev_offset: ?usize = null;
     var is_xref_type = false;
-    var index_values: std.ArrayListUnmanaged(u32) = .{};
+    var index_values: std.ArrayListUnmanaged(u32) = .empty;
     defer index_values.deinit(allocator);
 
     // Simple dict scan
@@ -802,7 +802,7 @@ fn parseObjectForJpeg(data: []const u8, offset: usize, obj_num: u32, gen_num: u3
 
 /// Find JPEG streams by scanning for "N G obj" patterns in the entire file.
 fn findJpegStreamsLinear(allocator: Allocator, data: []const u8) ![]PdfJpegStream {
-    var streams: std.ArrayListUnmanaged(PdfJpegStream) = .{};
+    var streams: std.ArrayListUnmanaged(PdfJpegStream) = .empty;
     errdefer streams.deinit(allocator);
 
     var i: usize = 0;
@@ -1417,7 +1417,7 @@ fn parseObjectForFlate(data: []const u8, offset: usize, obj_num: u32, gen_num: u
 
 /// Find FlateDecode image streams by linear scan.
 fn findFlateStreamsLinear(allocator: Allocator, data: []const u8) ![]PdfFlateStream {
-    var streams: std.ArrayListUnmanaged(PdfFlateStream) = .{};
+    var streams: std.ArrayListUnmanaged(PdfFlateStream) = .empty;
     errdefer streams.deinit(allocator);
 
     var i: usize = 0;
@@ -1633,7 +1633,7 @@ fn parseObjectForFlateContent(data: []const u8, offset: usize, obj_num: u32, gen
 
 /// Find non-image FlateDecode streams by linear scan.
 fn findFlateContentLinear(allocator: Allocator, data: []const u8) ![]PdfContentStream {
-    var streams: std.ArrayListUnmanaged(PdfContentStream) = .{};
+    var streams: std.ArrayListUnmanaged(PdfContentStream) = .empty;
     errdefer streams.deinit(allocator);
 
     var i: usize = 0;
@@ -1680,7 +1680,7 @@ fn makeTestPdf(allocator: Allocator) ![]u8 {
     // Build a minimal valid PDF with correct xref offsets by tracking positions dynamically.
     const jpeg_data = [_]u8{ 0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x02, 0xFF, 0xD9 };
 
-    var out: std.ArrayListUnmanaged(u8) = .{};
+    var out: std.ArrayListUnmanaged(u8) = .empty;
     errdefer out.deinit(allocator);
 
     // Header
@@ -1883,7 +1883,7 @@ test "splicePdfImages rejects wrong size" {
 /// Simple zlib stored-blocks compressor for test data.
 /// Same approach as png.zig's zlibCompress.
 fn testZlibCompress(allocator: Allocator, data: []const u8) ![]u8 {
-    var output: std.ArrayListUnmanaged(u8) = .{};
+    var output: std.ArrayListUnmanaged(u8) = .empty;
     errdefer output.deinit(allocator);
 
     // Zlib header: CMF=0x78, FLG=0x01
@@ -1919,7 +1919,7 @@ fn makeTestFlatePdf(allocator: Allocator) ![]u8 {
     const compressed = try testZlibCompress(allocator, &raw_filtered);
     defer allocator.free(compressed);
 
-    var out: std.ArrayListUnmanaged(u8) = .{};
+    var out: std.ArrayListUnmanaged(u8) = .empty;
     errdefer out.deinit(allocator);
 
     try out.appendSlice(allocator, "%PDF-1.4\n");

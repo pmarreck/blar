@@ -411,7 +411,7 @@ fn expandPdf(allocator: Allocator, content: []const u8) !?ExpandResult {
         defer allocator.free(content_streams);
             if (content_streams.len == 0) break :blk;
 
-        var replacements = std.ArrayList(pdf_mod.StreamReplacement){};
+        var replacements: std.ArrayList(pdf_mod.StreamReplacement) = .empty;
         defer {
             for (replacements.items) |rep| allocator.free(@constCast(rep.new_data));
             replacements.deinit(allocator);
@@ -776,7 +776,7 @@ fn collapseContainerById(
     // ZIP collapse: reconstruct ZIP from child entries with compression methods
     if (codec == .zip) {
         // Collect child entries (skip __meta__ if present, though ZIP doesn't use it)
-        var zip_entries = std.ArrayList(zip_mod.ZipWriteEntry){};
+        var zip_entries: std.ArrayList(zip_mod.ZipWriteEntry) = .empty;
         defer zip_entries.deinit(allocator);
 
         for (children) |child| {
@@ -1559,7 +1559,7 @@ test "microbench: serializeFileEntry 4KB" {
 
     // Warm up
     for (0..10) |_| {
-        var to_free: std.ArrayList([]u8) = .{};
+        var to_free: std.ArrayList([]u8) = .empty;
         defer { for (to_free.items) |item| alloc.free(item); to_free.deinit(alloc); }
         const r = try mini.serializeFileEntry(alloc, file, &to_free, null, null, null);
         std.mem.doNotOptimizeAway(r.ptr);
@@ -1569,7 +1569,7 @@ test "microbench: serializeFileEntry 4KB" {
     var timer = try std.time.Timer.start();
     _ = timer.lap();
     for (0..iterations) |_| {
-        var to_free: std.ArrayList([]u8) = .{};
+        var to_free: std.ArrayList([]u8) = .empty;
         defer { for (to_free.items) |item| alloc.free(item); to_free.deinit(alloc); }
         const r = try mini.serializeFileEntry(alloc, file, &to_free, null, null, null);
         std.mem.doNotOptimizeAway(r.ptr);

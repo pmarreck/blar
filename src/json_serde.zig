@@ -179,7 +179,7 @@ pub fn archiveToJson(allocator: Allocator, buf: []const u8) JsonSerdeError![]u8 
         allocator.free(entries);
     }
 
-    var out: std.ArrayList(u8) = .{};
+    var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
 
     try out.appendSlice(allocator, "{\n  \"version\": 1,\n  \"entries\": [");
@@ -397,7 +397,7 @@ pub fn jsonToArchive(allocator: Allocator, json_buf: []const u8) JsonSerdeError!
     defer allocator.free(archive_entries);
 
     // Track allocations for cleanup on error
-    var allocated_strings: std.ArrayList([]u8) = .{};
+    var allocated_strings: std.ArrayList([]u8) = .empty;
     defer {
         for (allocated_strings.items) |s| allocator.free(s);
         allocated_strings.deinit(allocator);

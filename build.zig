@@ -148,7 +148,7 @@ pub fn build(b: *std.Build) void {
     if (enable_flac) {
         addFlacSupport(static_lib.root_module, flac_lib);
     }
-    static_lib.linkLibrary(blip_lib);
+    static_lib.root_module.linkLibrary(blip_lib);
     if (b.option(bool, "emit-lib-llvm-ir", "Emit LLVM IR for the static library") orelse false) {
         const ir_install = b.addInstallFile(static_lib.getEmittedLlvmIr(), "blar-lib.ll");
         b.getInstallStep().dependOn(&ir_install.step);
@@ -165,14 +165,14 @@ pub fn build(b: *std.Build) void {
             .link_libc = true,
         }),
     });
-    blar.addCSourceFile(.{
+    blar.root_module.addCSourceFile(.{
         .file = b.path("src/blar.c"),
         .flags = &.{ "-std=c11", "-Wall", "-Wextra", "-Wpedantic", "-DHAVE_LIBMAGIC" },
     });
-    blar.linkLibrary(static_lib);
-    blar.linkLibrary(blip_lib);
-    blar.linkLibrary(progrez_lib);
-    blar.linkLibrary(magic_lib);
+    blar.root_module.linkLibrary(static_lib);
+    blar.root_module.linkLibrary(blip_lib);
+    blar.root_module.linkLibrary(progrez_lib);
+    blar.root_module.linkLibrary(magic_lib);
     blar.root_module.addIncludePath(b.path("src"));
     blar.root_module.addIncludePath(blip_include);
     blar.root_module.addIncludePath(progrez_dep.path("include"));
@@ -218,7 +218,7 @@ pub fn build(b: *std.Build) void {
         addFlacSupport(ffi_test_module, flac_lib);
     }
     const ffi_tests = b.addTest(.{ .root_module = ffi_test_module });
-    ffi_tests.linkLibrary(blip_lib);
+    ffi_tests.root_module.linkLibrary(blip_lib);
     const run_ffi_tests = b.addRunArtifact(ffi_tests);
 
     const test_step = b.step("test", "Run unit tests");
@@ -296,9 +296,10 @@ const CompileCommandsGen = struct {
             project_root, src_inc, blip_inc, progrez_inc, magic_inc,
         });
 
+        const io = b.graph.io;
         const out_path = try std.fs.path.join(alloc, &.{ project_root, "compile_commands.json" });
-        var file = try std.fs.cwd().createFile(out_path, .{});
-        defer file.close();
-        try file.writeAll(content);
+        var file = try std.Io.Dir.cwd().createFile(io, out_path, .{});
+        defer file.close(io);
+        try file.writeStreamingAll(io, content);
     }
 };

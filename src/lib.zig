@@ -2220,7 +2220,7 @@ export fn blar_create_streaming(
     defer page_allocator.free(zig_entries);
 
     // Track content buffers we read from disk so we can free them
-    var read_bufs = std.ArrayListUnmanaged([]u8){};
+    var read_bufs: std.ArrayListUnmanaged([]u8) = .empty;
     defer {
         for (read_bufs.items) |buf| page_allocator.free(buf);
         read_bufs.deinit(page_allocator);

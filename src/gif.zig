@@ -422,7 +422,7 @@ const testing = std.testing;
 /// Build a minimal valid GIF89a in memory (2x2, 4 colors).
 fn makeTestGif(allocator: Allocator) ![]u8 {
     // Minimal GIF89a: 2x2 pixels, 4-color palette, LZW min code size 2
-    var buf = std.ArrayListUnmanaged(u8){};
+    var buf: std.ArrayListUnmanaged(u8) = .empty;
     // Header
     try buf.appendSlice(allocator, "GIF89a");
     // Logical screen descriptor: width=2, height=2

@@ -198,7 +198,7 @@ fn zlibDecompress(allocator: Allocator, compressed: []const u8) ![]u8 {
 /// Produces valid zlib output. No actual compression (stored blocks only),
 /// which is fine since PNG pixel data goes through JXL for real compression.
 fn zlibCompress(allocator: Allocator, data: []const u8) ![]u8 {
-    var output: std.ArrayList(u8) = .{};
+    var output: std.ArrayList(u8) = .empty;
     errdefer output.deinit(allocator);
 
     // Zlib header: CMF=0x78 (deflate, window=32K), FLG=0x01
@@ -244,7 +244,7 @@ pub fn parsePng(allocator: Allocator, png_bytes: []const u8) (PngError || Alloca
 
     var pos: usize = 8;
     var info: ?PngInfo = null;
-    var idat_data: std.ArrayList(u8) = .{};
+    var idat_data: std.ArrayList(u8) = .empty;
     defer idat_data.deinit(allocator);
     var first_idat_pos: ?usize = null;
     var last_idat_end: ?usize = null;
@@ -431,7 +431,7 @@ fn computeChunkCrc(chunk_type: []const u8, data: []const u8) u32 {
 
 /// Encode raw pixels + pre/post IDAT metadata back to a PNG file.
 pub fn encodePng(allocator: Allocator, pixels: []const u8, info_arg: PngInfo, pre_idat: []const u8, post_idat: []const u8) ![]u8 {
-    var output: std.ArrayList(u8) = .{};
+    var output: std.ArrayList(u8) = .empty;
     errdefer output.deinit(allocator);
 
     // Write pre_idat (may need to patch IHDR if interlaced)
@@ -458,7 +458,7 @@ pub fn encodePng(allocator: Allocator, pixels: []const u8, info_arg: PngInfo, pr
     const pixel_row_bytes = @as(usize, info_arg.width) * @as(usize, info_arg.channels) * @as(usize, info_arg.bytes_per_sample);
 
     // Build filtered data: filter byte 0 (None) + raw row data
-    var filtered: std.ArrayList(u8) = .{};
+    var filtered: std.ArrayList(u8) = .empty;
     defer filtered.deinit(allocator);
 
     for (0..info_arg.height) |y| {
@@ -524,7 +524,7 @@ fn makeTestIdat(allocator: Allocator, raw: []const u8) ![]u8 {
 }
 
 fn makeMinimalPng(allocator: Allocator) ![]u8 {
-    var out: std.ArrayList(u8) = .{};
+    var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
 
     try out.appendSlice(allocator, &PNG_SIGNATURE);
@@ -600,7 +600,7 @@ test "encodePng roundtrip: pixels -> PNG -> parse -> same pixels" {
 }
 
 fn make2x2RgbPng(allocator: Allocator) ![]u8 {
-    var out: std.ArrayList(u8) = .{};
+    var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
 
     try out.appendSlice(allocator, &PNG_SIGNATURE);
@@ -663,7 +663,7 @@ test "row defilter: Paeth filter" {
 }
 
 fn makePngWithText(allocator: Allocator) ![]u8 {
-    var out: std.ArrayList(u8) = .{};
+    var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
 
     try out.appendSlice(allocator, &PNG_SIGNATURE);
@@ -709,7 +709,7 @@ test "encodePng roundtrip preserves tEXt metadata" {
 }
 
 fn make1x1GrayPng(allocator: Allocator) ![]u8 {
-    var out: std.ArrayList(u8) = .{};
+    var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
 
     try out.appendSlice(allocator, &PNG_SIGNATURE);

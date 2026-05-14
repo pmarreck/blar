@@ -132,7 +132,7 @@ pub fn parseTar(allocator: Allocator, data: []const u8) (TarError || Allocator.E
     if (data.len < 512) return TarError.InvalidTar;
     if (!isTarMagic(data)) return TarError.InvalidTar;
 
-    var entries = std.ArrayListUnmanaged(TarEntry){};
+    var entries: std.ArrayListUnmanaged(TarEntry) = .empty;
     defer entries.deinit(allocator);
 
     var offset: usize = 0;

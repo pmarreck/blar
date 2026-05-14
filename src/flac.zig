@@ -19,7 +19,7 @@ pub const FlacError = error{
 
 /// In-memory write context for FLAC encoder.
 const WriteContext = struct {
-    buf: std.ArrayListUnmanaged(u8) = .{},
+    buf: std.ArrayListUnmanaged(u8) = .empty,
     allocator: Allocator,
     ok: bool = true,
 };
@@ -144,7 +144,7 @@ pub fn encodePcmToFlac(
 const DecodeContext = struct {
     input: []const u8,
     input_pos: usize = 0,
-    output: std.ArrayListUnmanaged(u8) = .{},
+    output: std.ArrayListUnmanaged(u8) = .empty,
     allocator: Allocator,
     channels: u32 = 0,
     sample_rate: u32 = 0,

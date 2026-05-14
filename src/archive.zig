@@ -517,14 +517,14 @@ pub fn serializeDirEntry(allocator: Allocator, dir: DirEntry, to_free: *std.Arra
 /// Entries are serialized in the order given — caller controls ordering.
 /// Returns the complete archive as a byte slice. Caller owns returned memory.
 pub fn createArchive(allocator: Allocator, files: []const FileEntry) (Allocator.Error || ContainerError || compression_mod.CompressionError)![]u8 {
-    var to_free: std.ArrayList([]u8) = .{};
+    var to_free: std.ArrayList([]u8) = .empty;
     defer {
         for (to_free.items) |item| allocator.free(item);
         to_free.deinit(allocator);
     }
 
     // Serialize each file into a FILE container (ARRAY-based)
-    var file_elements: std.ArrayList([]const u8) = .{};
+    var file_elements: std.ArrayList([]const u8) = .empty;
     defer file_elements.deinit(allocator);
 
     for (files) |file| {
@@ -567,7 +567,7 @@ pub fn createFullArchive(
     comp_id: ?ct.CompressionId,
     num_threads: u8,
 ) (Allocator.Error || ContainerError || compression_mod.CompressionError)![]u8 {
-    var to_free: std.ArrayList([]u8) = .{};
+    var to_free: std.ArrayList([]u8) = .empty;
     defer {
         for (to_free.items) |item| allocator.free(item);
         to_free.deinit(allocator);
@@ -575,13 +575,13 @@ pub fn createFullArchive(
 
     // Items allocated by parallel threads using page_allocator (thread-safe)
     const pa = std.heap.page_allocator;
-    var parallel_to_free: std.ArrayList([]u8) = .{};
+    var parallel_to_free: std.ArrayList([]u8) = .empty;
     defer {
         for (parallel_to_free.items) |item| pa.free(item);
         parallel_to_free.deinit(allocator);
     }
 
-    var entry_elements: std.ArrayList([]const u8) = .{};
+    var entry_elements: std.ArrayList([]const u8) = .empty;
     defer entry_elements.deinit(allocator);
 
     // Phase 1: Serialize FILE entries and collect their xxHash64 checksums
@@ -679,7 +679,7 @@ pub fn createFullArchive(
                     a_files: *std.atomic.Value(u64),
                     a_bytes: *std.atomic.Value(u64),
                 ) void {
-                    var local_to_free: std.ArrayList([]u8) = .{};
+                    var local_to_free: std.ArrayList([]u8) = .empty;
                     const file_bytes = serializeFileEntry(alloc, file, &local_to_free, cid, null, null) catch |e| {
                         result.err = e;
                         // Clean up on error
@@ -1053,7 +1053,7 @@ pub const ArchiveReader = struct {
 
         // Collect child FILE checksums
         const count = try self.entryCount();
-        var child_hashes: std.ArrayList([8]u8) = .{};
+        var child_hashes: std.ArrayList([8]u8) = .empty;
         defer child_hashes.deinit(allocator);
 
         for (0..count) |i| {
@@ -1511,7 +1511,7 @@ test "Merkle hash uses per-file xxHash64 from FILE ARRAY container" {
     // the FILE ARRAY's xxHash64 checksum
     const file = FileEntry{ .path = "mydir/file.txt", .content = "hello", .mode = 0o644 };
 
-    var to_free: std.ArrayList([]u8) = .{};
+    var to_free: std.ArrayList([]u8) = .empty;
     defer {
         for (to_free.items) |item| allocator.free(item);
         to_free.deinit(allocator);

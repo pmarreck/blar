@@ -158,8 +158,9 @@ pub fn createArchiveStreaming(
     progress_fn: ProgressFn,
     progress_ctx: ?*anyopaque,
 ) (StreamingError || mini_blar.compression_mod.CompressionError)![]u8 {
-    // Create temp spill file in TMPDIR (RAM-backed per project convention)
-    const tmpdir = std.posix.getenv("TMPDIR") orelse "/tmp";
+    // Create temp spill file in TMPDIR (RAM-backed per project convention).
+    // std.posix.getenv was removed in Zig 0.16; std.c.getenv returns ?[*:0]const u8.
+    const tmpdir: []const u8 = if (std.c.getenv("TMPDIR")) |t| std.mem.span(t) else "/tmp";
     var spill_path_buf: [512]u8 = undefined;
     const spill_path = std.fmt.bufPrint(&spill_path_buf, "{s}/blar_spill_{d}.tmp", .{
         tmpdir, std.time.milliTimestamp(),

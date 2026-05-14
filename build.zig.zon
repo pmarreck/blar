@@ -33,8 +33,8 @@
             .hash = "progrez-0.1.0-0YJXrpMFAgCG7UTrQbsri0tU-QdFy01xaIv9sO4YI3fi",
         },
         .libmagic = .{
-            .url = "https://github.com/pmarreck/libmagic/archive/refs/tags/zig-0.15.0.tar.gz",
-            .hash = "libmagic-5.46.0-RysxHD9fCACu5caBjXS-x3qQnQM3nRfosCyktdVRzv-R",
+            .url = "https://github.com/pmarreck/libmagic/archive/refs/tags/zig-0.16.0.tar.gz",
+            .hash = "libmagic-5.46.0-RysxHIBfCACiotJjtfnDqQ6tBCd8-7SfHvT4Z2TlvEUm",
         },
         .flac = .{
             .url = "https://github.com/pmarreck/flac/archive/0f45951.tar.gz",

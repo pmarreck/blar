@@ -856,7 +856,7 @@ export fn blar_lzma2_decompress(
 // Generic compression C FFI exports
 // ---------------------------------------------------------------------------
 
-const compression_mod = @import("compression.zig");
+pub const compression_mod = @import("compression.zig");
 const CompressionId = archive.container_mod.CompressionId;
 // ---------------------------------------------------------------------------
 // Encryption C FFI exports

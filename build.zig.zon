@@ -9,13 +9,13 @@
             .hash = "blip-0.1.0-rcNuGOSZBwBX-Q-IYY7LA5enIHtkIUZetkSenD40cRH8",
         },
         .z7z = .{
-            .url = "https://github.com/pmarreck/z7z/archive/853960c.tar.gz",
-            .hash = "z7z-0.1.0-rkKuF4UvEQBhopPJzHt9iTWmHp0M521W9nmW4gOKmsP_",
+            .url = "https://github.com/pmarreck/z7z/archive/468ece8.tar.gz",
+            .hash = "z7z-0.1.0-rkKuF6vKBgBABoiu3SBYBwKgjVARX7AK9OId3azwZAle",
             .lazy = true,
         },
         .bzip2z = .{
-            .url = "https://github.com/pmarreck/bzip2z/archive/d9eb70e.tar.gz",
-            .hash = "bzip2z-0.1.0-m5NdllIYCABfKib61NbKSzgPGFU5kbhA7sW3iouqBsRB",
+            .url = "https://github.com/pmarreck/bzip2z/archive/9b9e28d.tar.gz",
+            .hash = "bzip2z-0.1.0-m5NdlsYYCACrnvOCZyqsVmJYY84BRf1XPFi08RfbnWPW",
             .lazy = true,
         },
         .lz4 = .{
@@ -29,8 +29,8 @@
             .lazy = true,
         },
         .progrez = .{
-            .url = "https://github.com/pmarreck/progrez/archive/802d645.tar.gz",
-            .hash = "progrez-0.1.0-0YJXrpMFAgCG7UTrQbsri0tU-QdFy01xaIv9sO4YI3fi",
+            .url = "https://github.com/pmarreck/progrez/archive/7d70ce8.tar.gz",
+            .hash = "progrez-0.1.0-0YJXrpMFAgARHkoD6RpFfS8kNgQEiYNu2ZbswsuBm2hf",
         },
         .libmagic = .{
             .url = "https://github.com/pmarreck/libmagic/archive/refs/tags/zig-0.16.0.tar.gz",

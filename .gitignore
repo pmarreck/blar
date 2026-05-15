@@ -14,3 +14,4 @@ macos-app/*.a
 inbox
 CLAUDE.md
 .direnv/
+zig-pkg/

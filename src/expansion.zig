@@ -813,11 +813,11 @@ fn collapseContainerById(
         @memcpy(pdf_buf, shell_data);
 
         // Track FlateDecode replacements for potential rewrite
-        var flate_replacements = std.ArrayList(struct {
+        var flate_replacements: std.ArrayList(struct {
             start: u64,
             orig_len: u64,
             new_data: []u8,
-        }){};
+        }) = .empty;
         defer {
             for (flate_replacements.items) |rep| allocator.free(rep.new_data);
             flate_replacements.deinit(allocator);
@@ -1470,8 +1470,9 @@ test "microbench: BMP expansion 64x64" {
 
     // Measure
     const iterations: u64 = 50;
-    var timer = try std.time.Timer.start();
-    _ = timer.lap();
+    var timer_io_inst: std.Io.Threaded = .init_single_threaded;
+    const timer_io = timer_io_inst.io();
+    const t_start = std.Io.Timestamp.now(timer_io, .awake);
     for (0..iterations) |_| {
         var r = expandFile(alloc, bmp, "bmp") catch null;
         if (r) |*res| {
@@ -1479,7 +1480,8 @@ test "microbench: BMP expansion 64x64" {
             res.deinit();
         }
     }
-    const elapsed_ns = timer.read();
+    const t_end = std.Io.Timestamp.now(timer_io, .awake);
+    const elapsed_ns: u64 = @intCast(t_end.nanoseconds - t_start.nanoseconds);
     const ns_per_op = elapsed_ns / iterations;
 
     std.debug.print("  BMP 64x64 expansion: {d} ns/op ({d:.2} ms/op)\n", .{
@@ -1529,14 +1531,16 @@ test "microbench: JPEG→JXL transcode 8x8" {
     }
 
     const iterations: u64 = 100;
-    var timer = try std.time.Timer.start();
-    _ = timer.lap();
+    var timer_io_inst: std.Io.Threaded = .init_single_threaded;
+    const timer_io = timer_io_inst.io();
+    const t_start = std.Io.Timestamp.now(timer_io, .awake);
     for (0..iterations) |_| {
         const r = jxl_local.jpegToJxl(alloc, &jpeg) catch continue;
         std.mem.doNotOptimizeAway(r.ptr);
         alloc.free(r);
     }
-    const elapsed_ns = timer.read();
+    const t_end = std.Io.Timestamp.now(timer_io, .awake);
+    const elapsed_ns: u64 = @intCast(t_end.nanoseconds - t_start.nanoseconds);
     const ns_per_op = elapsed_ns / iterations;
 
     std.debug.print("  JPEG→JXL 8x8: {d} ns/op ({d:.2} ms/op)\n", .{
@@ -1566,15 +1570,17 @@ test "microbench: serializeFileEntry 4KB" {
     }
 
     const iterations: u64 = 1000;
-    var timer = try std.time.Timer.start();
-    _ = timer.lap();
+    var timer_io_inst: std.Io.Threaded = .init_single_threaded;
+    const timer_io = timer_io_inst.io();
+    const t_start = std.Io.Timestamp.now(timer_io, .awake);
     for (0..iterations) |_| {
         var to_free: std.ArrayList([]u8) = .empty;
         defer { for (to_free.items) |item| alloc.free(item); to_free.deinit(alloc); }
         const r = try mini.serializeFileEntry(alloc, file, &to_free, null, null, null);
         std.mem.doNotOptimizeAway(r.ptr);
     }
-    const elapsed_ns = timer.read();
+    const t_end = std.Io.Timestamp.now(timer_io, .awake);
+    const elapsed_ns: u64 = @intCast(t_end.nanoseconds - t_start.nanoseconds);
     const ns_per_op = elapsed_ns / iterations;
 
     std.debug.print("  serializeFileEntry 4KB: {d} ns/op ({d:.2} µs/op)\n", .{

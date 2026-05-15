@@ -155,6 +155,29 @@ pub fn build(b: *std.Build) void {
     }
     b.installArtifact(static_lib);
 
+    // Public Zig module — consumers like zdiff call
+    // `b.dependency("blar", ...).module("blar")` and expect to `@import("blar")`
+    // and access `blar.core`, `blar.compression_mod`, etc. Re-export the same
+    // root source + dep wiring as the static lib.
+    const blar_module = b.addModule("blar", .{
+        .root_source_file = b.path("src/lib.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "blip", .module = blip_module },
+            .{ .name = "printable_binary", .module = pb_module },
+        },
+    });
+    blar_module.addOptions("build_options", build_options);
+    addJxlSupport(blar_module, jxl_include_path, jxl_lib_path);
+    if (enable_compression) {
+        addCompressionSupport(blar_module, z7z_module, bzip2z_module, lz4_lib, zstdz_lib);
+    }
+    if (enable_flac) {
+        addFlacSupport(blar_module, flac_lib);
+    }
+    blar_module.linkLibrary(blip_lib);
+
     // blar CLI executable — C program that links against the static lib + blip lib.
     const blar = b.addExecutable(.{
         .name = "blar",

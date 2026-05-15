@@ -479,7 +479,7 @@ fn makeTestGif(allocator: Allocator) ![]u8 {
 
     // Let me restart with a 1x1 red pixel GIF which is simpler
     buf.deinit(allocator);
-    buf = .{};
+    buf = .empty;
 
     try buf.appendSlice(allocator, "GIF89a");
     try buf.appendSlice(allocator, &[_]u8{ 1, 0, 1, 0 }); // 1x1

@@ -211,22 +211,21 @@ pub fn compress(
 pub fn decompress(allocator: Allocator, algo: ct.CompressionId, data: []const u8, decomp_len: u64) (Allocator.Error || CompressionError)![]u8 {
     switch (algo) {
         .lzma2 => {
-            const out_buf = try allocator.alloc(u8, @intCast(decomp_len));
-            errdefer allocator.free(out_buf);
-            var input_stream = std.io.fixedBufferStream(data);
-            var output_stream = std.io.fixedBufferStream(out_buf);
-            std.compress.lzma2.decompress(allocator, input_stream.reader(), output_stream.writer()) catch |e| {
-                allocator.free(out_buf);
-                return switch (e) {
-                    error.OutOfMemory => error.OutOfMemory,
-                    else => error.DecompressionFailed,
-                };
+            var in: std.Io.Reader = .fixed(data);
+            var aw: std.Io.Writer.Allocating = std.Io.Writer.Allocating.initCapacity(allocator, @intCast(decomp_len)) catch return error.OutOfMemory;
+            errdefer aw.deinit();
+            var dec = std.compress.lzma2.Decode.init(allocator) catch return error.OutOfMemory;
+            defer dec.deinit(allocator);
+            _ = dec.decompress(&in, &aw) catch |e| switch (e) {
+                error.OutOfMemory => return error.OutOfMemory,
+                else => return error.DecompressionFailed,
             };
-            if (output_stream.pos != @as(usize, @intCast(decomp_len))) {
-                allocator.free(out_buf);
+            const out = aw.toOwnedSlice() catch return error.OutOfMemory;
+            if (out.len != @as(usize, @intCast(decomp_len))) {
+                allocator.free(out);
                 return error.DecompressionFailed;
             }
-            return out_buf;
+            return out;
         },
         .bzip2 => {
             // bzip2 is self-describing (stream contains its own length), decomp_len not needed

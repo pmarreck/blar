@@ -57,7 +57,7 @@ fn parseIhdr(data: []const u8) PngError!PngInfo {
 
     if (width == 0 or height == 0) return PngError.InvalidPng;
 
-    const color_type: PngColorType = std.meta.intToEnum(PngColorType, color_type_raw) catch
+    const color_type: PngColorType = std.enums.fromInt(PngColorType, color_type_raw) orelse
         return PngError.UnsupportedPng;
 
     const channels: u8 = switch (color_type) {

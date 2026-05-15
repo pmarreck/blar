@@ -14,6 +14,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const page_allocator = std.heap.page_allocator;
 const archive = @import("archive.zig");
+const io_singleton = @import("io_singleton.zig");
 
 // BLIP-side error_string from the BLIP dep (libblip.a). Used as fall-through
 // for blar_error_string when the code is not blar-specific.
@@ -323,7 +324,7 @@ export fn blar_create_full(
 
     // Convert per_file_comp_algo: 0=none, 1=lzma2, 2=bzip2, 3=lz4, 4=zstd
     const CompressionId_ = archive.container_mod.CompressionId;
-    const comp_id: ?CompressionId_ = if (per_file_comp_algo == 0) null else std.meta.intToEnum(CompressionId_, @as(u7, @truncate(per_file_comp_algo))) catch return -32;
+    const comp_id: ?CompressionId_ = if (per_file_comp_algo == 0) null else (std.enums.fromInt(CompressionId_, @as(u7, @truncate(per_file_comp_algo))) orelse return -32);
 
     const result = archive.createFullArchive(page_allocator, archive_entries, progress_fn, phase_fn, progress_ctx, comp_id, num_threads) catch |e| {
         return fullArchiveErrorCode(e);
@@ -2264,9 +2265,12 @@ export fn blar_create_streaming(
             } else if (ce.source_path) |sp| {
                 // Read file from disk
                 const path = sp[0..ce.source_path_len];
-                const file = std.fs.cwd().openFile(path, .{}) catch return -42;
-                defer file.close();
-                const data = file.readToEndAlloc(page_allocator, std.math.maxInt(usize)) catch return -42;
+                const io = io_singleton.io();
+                const file = std.Io.Dir.cwd().openFile(io, path, .{}) catch return -42;
+                defer file.close(io);
+                var read_buf: [4096]u8 = undefined;
+                var file_reader = file.reader(io, &read_buf);
+                const data = file_reader.interface.allocRemaining(page_allocator, .unlimited) catch return -42;
                 read_bufs.append(page_allocator, data) catch return -13;
                 content = data;
             }
@@ -2309,7 +2313,7 @@ export fn blar_create_streaming(
     }
 
     const CompId = archive.container_mod.CompressionId;
-    const comp: ?CompId = if (per_file_comp_algo == 0) null else std.meta.intToEnum(CompId, @as(u7, @truncate(per_file_comp_algo))) catch return -32;
+    const comp: ?CompId = if (per_file_comp_algo == 0) null else (std.enums.fromInt(CompId, @as(u7, @truncate(per_file_comp_algo))) orelse return -32);
 
     
     const result = streaming_mod.createArchiveStreaming(page_allocator, zig_entries, comp, expand_containers, expand_all_zips, progress_fn, progress_ctx) catch return -40;
@@ -3449,7 +3453,7 @@ export fn blar_compress_container(
     out_buf: *[*]u8,
     out_len: *usize,
 ) callconv(.c) i32 {
-    const algo = std.meta.intToEnum(CompressionId, @as(u7, @truncate(algo_id))) catch return -32;
+    const algo = std.enums.fromInt(CompressionId, @as(u7, @truncate(algo_id))) orelse return -32;
     const slice = buf[0..buf_len];
     const result = compression_mod.compressContainer(page_allocator, algo, slice, progress_fn, phase_fn, progress_ctx, num_threads) catch |e| switch (e) {
         error.OutOfMemory => return -13,
@@ -3491,8 +3495,8 @@ export fn blar_encrypt_container(
     out_buf: *[*]u8,
     out_len: *usize,
 ) callconv(.c) i32 {
-    const enc_id = std.meta.intToEnum(enc_container_mod.EncryptionId, @as(u7, @truncate(enc_id_raw))) catch return -1;
-    const kdf_id = std.meta.intToEnum(enc_container_mod.KdfId, @as(u7, @truncate(kdf_id_raw))) catch return -1;
+    const enc_id = std.enums.fromInt(enc_container_mod.EncryptionId, @as(u7, @truncate(enc_id_raw))) orelse return -1;
+    const kdf_id = std.enums.fromInt(enc_container_mod.KdfId, @as(u7, @truncate(kdf_id_raw))) orelse return -1;
     const result = encryption_mod.encryptContainer(
         page_allocator,
         enc_id,

@@ -712,7 +712,7 @@ pub fn decode(allocator: std.mem.Allocator, input: []const u8, options: DecodeOp
 /// Format encoded output into groups for readability.
 /// Caller owns the returned slice and must free it with the same allocator.
 pub fn format(allocator: std.mem.Allocator, input: []const u8, options: FormatOptions) ![]u8 {
-    var result: std.ArrayListUnmanaged(u8) = .{};
+    var result: std.ArrayListUnmanaged(u8) = .empty;
     errdefer result.deinit(allocator);
 
     const separator: u8 = if (options.use_tabs) '\t' else ' ';

@@ -15,6 +15,7 @@ const container = @import("blip").container_mod;
 const ct = @import("blip").container_types;
 const csum_mod = @import("blip").checksum_mod;
 const expansion = @import("expansion.zig");
+const io_singleton = @import("io_singleton.zig");
 
 const FileEntry = mini_blar.FileEntry;
 const DirEntry = mini_blar.DirEntry;
@@ -162,16 +163,20 @@ pub fn createArchiveStreaming(
     // std.posix.getenv was removed in Zig 0.16; std.c.getenv returns ?[*:0]const u8.
     const tmpdir: []const u8 = if (std.c.getenv("TMPDIR")) |t| std.mem.span(t) else "/tmp";
     var spill_path_buf: [512]u8 = undefined;
+    const tmp_io = io_singleton.io();
+    const tmp_ts = std.Io.Timestamp.now(tmp_io, .real);
+    const tmp_ms: i64 = @intCast(@divFloor(tmp_ts.nanoseconds, 1_000_000));
     const spill_path = std.fmt.bufPrint(&spill_path_buf, "{s}/blar_spill_{d}.tmp", .{
-        tmpdir, std.time.milliTimestamp(),
+        tmpdir, tmp_ms,
     }) catch return StreamingError.SpillFailed;
 
-    var spill_file = std.fs.cwd().createFile(spill_path, .{
+    const io = io_singleton.io();
+    var spill_file = std.Io.Dir.cwd().createFile(io, spill_path, .{
         .read = true,
     }) catch return StreamingError.SpillFailed;
     defer {
-        spill_file.close();
-        std.fs.cwd().deleteFile(spill_path) catch {};
+        spill_file.close(io);
+        std.Io.Dir.cwd().deleteFile(io, spill_path) catch {};
     }
 
     var spill_index: std.ArrayList(SpillEntry) = .empty;
@@ -202,9 +207,9 @@ pub fn createArchiveStreaming(
     }
     for (slots) |*s| {
         s.* = .{
-            .result_entries = .{},
-            .paths = .{},
-            .contents = .{},
+            .result_entries = .empty,
+            .paths = .empty,
+            .contents = .empty,
             .has_dir = false,
             .had_error = false,
         };
@@ -311,7 +316,7 @@ pub fn createArchiveStreaming(
                     }
                     try file_hashes.put(file.path, xhash);
 
-                    spill_file.writeAll(serialized) catch return StreamingError.SpillFailed;
+                    spill_file.writeStreamingAll(io, serialized) catch return StreamingError.SpillFailed;
 
                     try spill_index.append(allocator, .{
                         .offset = spill_offset,
@@ -355,7 +360,7 @@ pub fn createArchiveStreaming(
                     if (std.mem.lastIndexOfScalar(u8, f.path, '/')) |slash| {
                         const parent = f.path[0..slash];
                         const gop = try parent_child_hashes.getOrPut(parent);
-                        if (!gop.found_existing) gop.value_ptr.* = .{};
+                        if (!gop.found_existing) gop.value_ptr.* = .empty;
                         try gop.value_ptr.append(allocator, hash);
                     }
                 }
@@ -384,7 +389,7 @@ pub fn createArchiveStreaming(
 
         const dir_bytes = try mini_blar.serializeDirEntry(allocator, dir_with_merkle, &to_free);
 
-        spill_file.writeAll(dir_bytes) catch return StreamingError.SpillFailed;
+        spill_file.writeStreamingAll(io, dir_bytes) catch return StreamingError.SpillFailed;
 
         se.offset = spill_offset;
         se.size = dir_bytes.len;
@@ -444,8 +449,7 @@ pub fn createArchiveStreaming(
     // Stream-copy entries from spill file (in spill order)
     for (spill_index.items) |se| {
         const sz: usize = @intCast(se.size);
-        spill_file.seekTo(se.offset) catch return StreamingError.IoError;
-        const bytes_read = spill_file.readAll(result[pos..][0..sz]) catch return StreamingError.IoError;
+        const bytes_read = spill_file.readPositionalAll(io, result[pos..][0..sz], se.offset) catch return StreamingError.IoError;
         if (bytes_read != sz) return StreamingError.IoError;
         pos += sz;
     }

@@ -13,6 +13,7 @@ const ChaCha20Poly1305 = std.crypto.aead.chacha_poly.ChaCha20Poly1305;
 const argon2_mod = std.crypto.pwhash.argon2;
 const pbkdf2_fn = std.crypto.pwhash.pbkdf2;
 const HmacSha256 = std.crypto.auth.hmac.sha2.HmacSha256;
+const io_singleton = @import("io_singleton.zig");
 
 pub const EncryptionError = error{
     EncryptionFailed,
@@ -42,6 +43,7 @@ pub fn deriveKey(allocator: Allocator, kdf_id: ct.KdfId, password: []const u8, s
                 salt,
                 .{ .t = 3, .m = 65536, .p = 4 },
                 .argon2id,
+                io_singleton.io(),
             ) catch return error.EncryptionFailed;
         },
         .pbkdf2_sha256 => {
@@ -57,9 +59,9 @@ pub fn deriveKey(allocator: Allocator, kdf_id: ct.KdfId, password: []const u8, s
 pub fn encrypt(allocator: Allocator, enc_id: ct.EncryptionId, kdf_id: ct.KdfId, plaintext: []const u8, password: []const u8) (Allocator.Error || EncryptionError)!EncryptResult {
     // Generate random salt and nonce via OS CSPRNG
     var salt: [ct.ENC_SALT_LEN]u8 = undefined;
-    std.crypto.random.bytes(&salt);
+    io_singleton.io().randomSecure(&salt) catch return error.EncryptionFailed;
     var nonce: [12]u8 = undefined;
-    std.crypto.random.bytes(&nonce);
+    io_singleton.io().randomSecure(&nonce) catch return error.EncryptionFailed;
 
     const key = try deriveKey(allocator, kdf_id, password, &salt);
 

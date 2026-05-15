@@ -647,18 +647,17 @@ pub fn createFullArchive(
             r.* = .{
                 .bytes = &.{},
                 .hash = .{0} ** 8,
-                .to_free_items = .{},
+                .to_free_items = .empty,
                 .err = null,
             };
         }
 
-        // Use per-file single-threaded compression to avoid oversubscription
-        var pool: std.Thread.Pool = undefined;
-        pool.init(.{
-            .allocator = allocator,
-            .n_jobs = @intCast(@min(resolved_threads, file_count)),
-        }) catch return error.OutOfMemory;
-        defer pool.deinit();
+        // Use per-file single-threaded compression to avoid oversubscription.
+        // std.Thread.Pool / WaitGroup removed in 0.16 — hand-rolled bounded
+        // raw-spawn pool with an atomic next-index counter is the
+        // documented replacement (see ZIG_0.15_TO_0.16_MIGRATION.md
+        // mini_blar firsthand note).
+        const num_workers: usize = @intCast(@min(resolved_threads, file_count));
 
         // Use page_allocator for per-thread work — it's thread-safe (mmap-based).
         // The caller's allocator may not be thread-safe (e.g., testing.allocator).
@@ -667,38 +666,59 @@ pub fn createFullArchive(
         // Atomic counters for progress reporting from parallel workers
         var atomic_files_done = std.atomic.Value(u64).init(0);
         var atomic_bytes_done = std.atomic.Value(u64).init(0);
+        var next_slot = std.atomic.Value(usize).init(0);
 
-        var wg: std.Thread.WaitGroup = .{};
-        for (file_slots, 0..) |entry_idx, slot| {
-            pool.spawnWg(&wg, struct {
-                fn work(
-                    alloc: Allocator,
-                    file: FileEntry,
-                    cid: ?ct.CompressionId,
-                    result: *FileResult,
-                    a_files: *std.atomic.Value(u64),
-                    a_bytes: *std.atomic.Value(u64),
-                ) void {
+        const WorkerCtx = struct {
+            alloc: Allocator,
+            entries: []const ArchiveEntry,
+            file_slots: []const usize,
+            comp_id: ?ct.CompressionId,
+            file_results: []FileResult,
+            a_files: *std.atomic.Value(u64),
+            a_bytes: *std.atomic.Value(u64),
+            next: *std.atomic.Value(usize),
+            work_count: usize,
+        };
+
+        const ctx = WorkerCtx{
+            .alloc = thread_alloc,
+            .entries = entries,
+            .file_slots = file_slots,
+            .comp_id = comp_id,
+            .file_results = file_results,
+            .a_files = &atomic_files_done,
+            .a_bytes = &atomic_bytes_done,
+            .next = &next_slot,
+            .work_count = file_count,
+        };
+
+        const worker_fn = struct {
+            fn run(c: WorkerCtx) void {
+                while (true) {
+                    const slot = c.next.fetchAdd(1, .acq_rel);
+                    if (slot >= c.work_count) return;
+                    const entry_idx = c.file_slots[slot];
+                    const file = c.entries[entry_idx].file;
+                    const result = &c.file_results[slot];
+
                     var local_to_free: std.ArrayList([]u8) = .empty;
-                    const file_bytes = serializeFileEntry(alloc, file, &local_to_free, cid, null, null) catch |e| {
+                    const file_bytes = serializeFileEntry(c.alloc, file, &local_to_free, c.comp_id, null, null) catch |e| {
                         result.err = e;
-                        // Clean up on error
-                        for (local_to_free.items) |item| alloc.free(item);
-                        local_to_free.deinit(alloc);
-                        // Still increment so progress loop terminates
-                        _ = a_files.fetchAdd(1, .release);
-                        _ = a_bytes.fetchAdd(file.content.len, .release);
-                        return;
+                        for (local_to_free.items) |item| c.alloc.free(item);
+                        local_to_free.deinit(c.alloc);
+                        _ = c.a_files.fetchAdd(1, .release);
+                        _ = c.a_bytes.fetchAdd(file.content.len, .release);
+                        continue;
                     };
 
                     // Extract xxHash64
                     const file_view = container.parseLPHeader(file_bytes) catch |e| {
                         result.err = e;
-                        for (local_to_free.items) |item| alloc.free(item);
-                        local_to_free.deinit(alloc);
-                        _ = a_files.fetchAdd(1, .release);
-                        _ = a_bytes.fetchAdd(file.content.len, .release);
-                        return;
+                        for (local_to_free.items) |item| c.alloc.free(item);
+                        local_to_free.deinit(c.alloc);
+                        _ = c.a_files.fetchAdd(1, .release);
+                        _ = c.a_bytes.fetchAdd(file.content.len, .release);
+                        continue;
                     };
                     const csum = file_view.checksumSlice();
                     var hash: [8]u8 = .{0} ** 8;
@@ -711,24 +731,35 @@ pub fn createFullArchive(
                     result.to_free_items = local_to_free;
 
                     // Signal completion for progress tracking
-                    _ = a_files.fetchAdd(1, .release);
-                    _ = a_bytes.fetchAdd(file.content.len, .release);
+                    _ = c.a_files.fetchAdd(1, .release);
+                    _ = c.a_bytes.fetchAdd(file.content.len, .release);
                 }
-            }.work, .{ thread_alloc, entries[entry_idx].file, comp_id, &file_results[slot], &atomic_files_done, &atomic_bytes_done });
+            }
+        }.run;
+
+        const workers = try allocator.alloc(std.Thread, num_workers);
+        defer allocator.free(workers);
+        var spawned: usize = 0;
+        while (spawned < num_workers) : (spawned += 1) {
+            workers[spawned] = std.Thread.spawn(.{}, worker_fn, .{ctx}) catch {
+                // Drain queue so already-spawned workers exit, then join.
+                _ = next_slot.fetchAdd(file_count, .release);
+                for (workers[0..spawned]) |w| w.join();
+                return error.OutOfMemory;
+            };
         }
 
         // Poll progress while workers compress files.
-        // Main thread doesn't participate as a worker (pool has enough threads).
+        const sleep_io = std.Io.Threaded.global_single_threaded.io();
         while (atomic_files_done.load(.acquire) < file_count) {
             if (progress_fn) |cb| {
                 cb(entries_done + atomic_files_done.load(.acquire),
                     bytes_done + atomic_bytes_done.load(.acquire),
                     progress_ctx);
             }
-            std.Thread.sleep(100 * std.time.ns_per_ms);
+            std.Io.sleep(sleep_io, .fromMilliseconds(100), .awake) catch {};
         }
-        // Formally wait for pool (should return near-instantly since all work is done)
-        pool.waitAndWork(&wg);
+        for (workers) |t| t.join();
 
         // Final progress update
         entries_done += file_count;
@@ -809,7 +840,7 @@ pub fn createFullArchive(
                         const parent = f.path[0..slash];
                         const gop = try parent_child_hashes.getOrPut(parent);
                         if (!gop.found_existing) {
-                            gop.value_ptr.* = .{};
+                            gop.value_ptr.* = .empty;
                         }
                         try gop.value_ptr.append(allocator, hash);
                     }

@@ -403,6 +403,14 @@ pub fn jsonToArchive(allocator: Allocator, json_buf: []const u8) JsonSerdeError!
         allocated_strings.deinit(allocator);
     }
 
+    // Track xattr slices separately (parseJsonXattrs returns []const XattrEntry
+    // which can't be stored in allocated_strings (which holds []u8 only)).
+    var allocated_xattrs: std.ArrayList([]const mini_blar.XattrEntry) = .empty;
+    defer {
+        for (allocated_xattrs.items) |xs| allocator.free(xs);
+        allocated_xattrs.deinit(allocator);
+    }
+
     for (json_entries, 0..) |entry_val, i| {
         if (entry_val != .object) return error.InvalidJson;
         const obj = entry_val.object;
@@ -443,6 +451,7 @@ pub fn jsonToArchive(allocator: Allocator, json_buf: []const u8) JsonSerdeError!
 
             // Parse xattrs
             const xattrs = try parseJsonXattrs(allocator, obj, &allocated_strings);
+            if (xattrs.len > 0) allocated_xattrs.append(allocator, xattrs) catch return error.OutOfMemory;
             // Parse resource_fork
             const rf_str = getJsonString(obj, "resource_fork") orelse "";
             const resource_fork = if (rf_str.len > 0) blk: {
@@ -518,6 +527,7 @@ pub fn jsonToArchive(allocator: Allocator, json_buf: []const u8) JsonSerdeError!
         } else if (std.mem.eql(u8, type_str, "dir")) {
             // Parse xattrs for dirs
             const xattrs = try parseJsonXattrs(allocator, obj, &allocated_strings);
+            if (xattrs.len > 0) allocated_xattrs.append(allocator, xattrs) catch return error.OutOfMemory;
 
             // Parse container_type (optional)
             const container_type_str = getJsonString(obj, "container_type") orelse "";

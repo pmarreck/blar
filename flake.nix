@@ -100,9 +100,17 @@
             mkdir -p $ZIG_GLOBAL_CACHE_DIR
             cp -r ${zigDeps}/* $ZIG_GLOBAL_CACHE_DIR/
             chmod -R u+w $ZIG_GLOBAL_CACHE_DIR
+            ${pkgs.lib.optionalString pkgs.stdenv.isLinux ''
+              # Find the glibc dynamic linker for this architecture so
+              # test binaries (linking libjxl -> libc) can be exec'd in
+              # the Nix build sandbox.
+              GLIBC_LD=$(echo ${pkgs.glibc.out}/lib/ld-linux-*.so.*)
+              EXTRA_FLAGS="-Ddynamic-linker=$GLIBC_LD"
+            ''}
             timeout 600 zig build test \
               -Djxl-include-path=${pkgs.libjxl.dev}/include \
               -Djxl-lib-path=${pkgs.libjxl}/lib \
+              ''${EXTRA_FLAGS:-} \
               || { echo "Tests failed"; exit 1; }
           '';
           installPhase = ''

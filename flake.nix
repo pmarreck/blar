@@ -78,7 +78,8 @@
             chmod -R u+w $ZIG_GLOBAL_CACHE_DIR
             zig build --prefix $out -Doptimize=ReleaseFast \
               -Djxl-include-path=${pkgs.libjxl.dev}/include \
-              -Djxl-lib-path=${pkgs.libjxl}/lib
+              -Djxl-lib-path=${pkgs.libjxl}/lib \
+              -Dzlib-lib-path=${pkgs.zlib}/lib
           '';
         };
 
@@ -110,6 +111,7 @@
             timeout 600 zig build test \
               -Djxl-include-path=${pkgs.libjxl.dev}/include \
               -Djxl-lib-path=${pkgs.libjxl}/lib \
+              -Dzlib-lib-path=${pkgs.zlib}/lib \
               ''${EXTRA_FLAGS:-} \
               || { echo "Tests failed"; exit 1; }
           '';

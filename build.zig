@@ -90,7 +90,8 @@ pub fn build(b: *std.Build) void {
     const jxl_include_path = b.option([]const u8, "jxl-include-path", "Path to libjxl headers");
     const jxl_lib_path = b.option([]const u8, "jxl-lib-path", "Path to libjxl libraries");
     // zlib system library — separate path from libjxl on NixOS so that
-    // explicit -target builds (e.g. tests) can still find libz.
+    // explicit -target builds (e.g. tests) can still find libz / zlib.h.
+    const zlib_include_path = b.option([]const u8, "zlib-include-path", "Path to zlib headers (zlib.h)");
     const zlib_lib_path = b.option([]const u8, "zlib-lib-path", "Path to zlib libraries");
 
     // Helpers — attach codec deps to a module.
@@ -99,11 +100,13 @@ pub fn build(b: *std.Build) void {
             module: *std.Build.Module,
             inc_path: ?[]const u8,
             lib_path: ?[]const u8,
-            z_path: ?[]const u8,
+            z_inc: ?[]const u8,
+            z_lib: ?[]const u8,
         ) void {
             if (inc_path) |inc| module.addSystemIncludePath(.{ .cwd_relative = inc });
             if (lib_path) |lib| module.addLibraryPath(.{ .cwd_relative = lib });
-            if (z_path) |z| module.addLibraryPath(.{ .cwd_relative = z });
+            if (z_inc) |zi| module.addSystemIncludePath(.{ .cwd_relative = zi });
+            if (z_lib) |zl| module.addLibraryPath(.{ .cwd_relative = zl });
             module.linkSystemLibrary("jxl", .{});
             module.linkSystemLibrary("jxl_threads", .{});
             module.linkSystemLibrary("z", .{});
@@ -146,7 +149,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
     static_lib.root_module.addOptions("build_options", build_options);
-    addJxlSupport(static_lib.root_module, jxl_include_path, jxl_lib_path, zlib_lib_path);
+    addJxlSupport(static_lib.root_module, jxl_include_path, jxl_lib_path, zlib_include_path, zlib_lib_path);
     if (enable_compression) {
         addCompressionSupport(static_lib.root_module, z7z_module, bzip2z_module, lz4_lib, zstdz_lib);
     }
@@ -174,7 +177,7 @@ pub fn build(b: *std.Build) void {
         },
     });
     blar_module.addOptions("build_options", build_options);
-    addJxlSupport(blar_module, jxl_include_path, jxl_lib_path, zlib_lib_path);
+    addJxlSupport(blar_module, jxl_include_path, jxl_lib_path, zlib_include_path, zlib_lib_path);
     if (enable_compression) {
         addCompressionSupport(blar_module, z7z_module, bzip2z_module, lz4_lib, zstdz_lib);
     }
@@ -238,7 +241,7 @@ pub fn build(b: *std.Build) void {
         },
     });
     ffi_test_module.addOptions("build_options", build_options);
-    addJxlSupport(ffi_test_module, jxl_include_path, jxl_lib_path, zlib_lib_path);
+    addJxlSupport(ffi_test_module, jxl_include_path, jxl_lib_path, zlib_include_path, zlib_lib_path);
     if (enable_compression) {
         addCompressionSupport(ffi_test_module, z7z_module, bzip2z_module, lz4_lib, zstdz_lib);
     }

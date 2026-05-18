@@ -79,6 +79,7 @@
             zig build --prefix $out -Doptimize=ReleaseFast \
               -Djxl-include-path=${pkgs.libjxl.dev}/include \
               -Djxl-lib-path=${pkgs.libjxl}/lib \
+              -Dzlib-include-path=${pkgs.zlib.dev}/include \
               -Dzlib-lib-path=${pkgs.zlib}/lib
           '';
         };
@@ -111,6 +112,7 @@
             timeout 600 zig build test \
               -Djxl-include-path=${pkgs.libjxl.dev}/include \
               -Djxl-lib-path=${pkgs.libjxl}/lib \
+              -Dzlib-include-path=${pkgs.zlib.dev}/include \
               -Dzlib-lib-path=${pkgs.zlib}/lib \
               ''${EXTRA_FLAGS:-} \
               || { echo "Tests failed"; exit 1; }

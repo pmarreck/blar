@@ -103,19 +103,39 @@
             cp -r ${zigDeps}/* $ZIG_GLOBAL_CACHE_DIR/
             chmod -R u+w $ZIG_GLOBAL_CACHE_DIR
             ${pkgs.lib.optionalString pkgs.stdenv.isLinux ''
-              # Find the glibc dynamic linker for this architecture so
-              # test binaries (linking libjxl -> libc) can be exec'd in
-              # the Nix build sandbox.
+              # On NixOS the binary's baked-in dynamic interpreter
+              # (/lib64/ld-linux-x86-64.so.2) is missing from the build
+              # sandbox. Test binaries link libjxl -> libc so they
+              # cannot exec without the interpreter.
+              #
+              # We cannot pass -Ddynamic-linker to zig because the flag
+              # propagates to compiler_rt's shared-library variant
+              # which then errors with LldCannotSpecifyDynamicLinker-
+              # ForSharedLibraries. Instead: install-tests to emit the
+              # test binary, patchelf it in place, then run it
+              # directly bypassing `zig build test`.
               GLIBC_LD=$(echo ${pkgs.glibc.out}/lib/ld-linux-*.so.*)
-              EXTRA_FLAGS="-Ddynamic-linker=$GLIBC_LD"
+
+              zig build install-tests \
+                -Doptimize=ReleaseFast \
+                -Djxl-include-path=${pkgs.libjxl.dev}/include \
+                -Djxl-lib-path=${pkgs.libjxl}/lib \
+                -Dzlib-include-path=${pkgs.zlib.dev}/include \
+                -Dzlib-lib-path=${pkgs.zlib}/lib
+
+              ${pkgs.patchelf}/bin/patchelf --set-interpreter "$GLIBC_LD" \
+                zig-out/tests/ffi_tests
+
+              timeout 600 zig-out/tests/ffi_tests || { echo "Tests failed"; exit 1; }
             ''}
-            timeout 600 zig build test \
-              -Djxl-include-path=${pkgs.libjxl.dev}/include \
-              -Djxl-lib-path=${pkgs.libjxl}/lib \
-              -Dzlib-include-path=${pkgs.zlib.dev}/include \
-              -Dzlib-lib-path=${pkgs.zlib}/lib \
-              ''${EXTRA_FLAGS:-} \
-              || { echo "Tests failed"; exit 1; }
+            ${pkgs.lib.optionalString pkgs.stdenv.isDarwin ''
+              timeout 600 zig build test \
+                -Djxl-include-path=${pkgs.libjxl.dev}/include \
+                -Djxl-lib-path=${pkgs.libjxl}/lib \
+                -Dzlib-include-path=${pkgs.zlib.dev}/include \
+                -Dzlib-lib-path=${pkgs.zlib}/lib \
+                || { echo "Tests failed"; exit 1; }
+            ''}
           '';
           installPhase = ''
             mkdir -p $out

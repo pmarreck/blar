@@ -255,6 +255,17 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_ffi_tests.step);
 
+    // install-tests — emit the test binaries into zig-out/bin/ so that
+    // CI lanes can patchelf / wrap them before running. Useful for nix
+    // sandboxed test runs where libc-linked binaries need their
+    // interpreter patched to the nix glibc loader.
+    const install_ffi_tests = b.addInstallArtifact(ffi_tests, .{
+        .dest_dir = .{ .override = .{ .custom = "tests" } },
+        .dest_sub_path = "ffi_tests",
+    });
+    const install_tests_step = b.step("install-tests", "Build & install test binaries (without running)");
+    install_tests_step.dependOn(&install_ffi_tests.step);
+
     // compile_commands.json — for clangd / clang-tidy
     const cc_gen = CompileCommandsGen.create(b, .{
         .src_include = b.path("src"),

@@ -194,47 +194,20 @@ fn zlibDecompress(allocator: Allocator, compressed: []const u8) ![]u8 {
         return PngError.CorruptedData;
 }
 
-/// Zlib-compress data using stored deflate blocks + Adler-32.
-/// Produces valid zlib output. No actual compression (stored blocks only),
-/// which is fine since PNG pixel data goes through JXL for real compression.
+/// Zlib-compress PNG IDAT data.
+///
+/// Routes through `deflate_emit.zlib` so all of blar's deflate emission flows
+/// through one chokepoint; see deflate_emit.zig for the architectural intent.
+/// Today this is real zlib at `Z_DEFAULT_COMPRESSION`; when
+/// `deflate_fingerprint` lands, the call site here doesn't change — only the
+/// shim's body does.
+///
+/// Historical: this function previously emitted spec-valid but
+/// not-actually-compressed zlib output (stored blocks only), producing 8–80×
+/// PNG bloat on extraction. The empirical byte-identity audit (2026-05-22)
+/// caught the regression.
 fn zlibCompress(allocator: Allocator, data: []const u8) ![]u8 {
-    var output: std.ArrayList(u8) = .empty;
-    errdefer output.deinit(allocator);
-
-    // Zlib header: CMF=0x78 (deflate, window=32K), FLG=0x01
-    // (0x78*256 + 0x01) % 31 == 0
-    try output.appendSlice(allocator, &[_]u8{ 0x78, 0x01 });
-
-    // Raw deflate stored blocks
-    const max_block: usize = 65535;
-    const num_blocks: usize = if (data.len == 0) 1 else (data.len + max_block - 1) / max_block;
-
-    var pos: usize = 0;
-    var block_idx: usize = 0;
-    while (block_idx < num_blocks) : (block_idx += 1) {
-        const remaining = data.len - pos;
-        const block_len: u16 = @intCast(@min(remaining, max_block));
-        const is_final: u8 = if (block_idx == num_blocks - 1) 1 else 0;
-
-        try output.append(allocator, is_final);
-        var len_bytes: [2]u8 = undefined;
-        std.mem.writeInt(u16, &len_bytes, block_len, .little);
-        try output.appendSlice(allocator, &len_bytes);
-        std.mem.writeInt(u16, &len_bytes, ~block_len, .little);
-        try output.appendSlice(allocator, &len_bytes);
-        if (block_len > 0) {
-            try output.appendSlice(allocator, data[pos..][0..block_len]);
-        }
-        pos += block_len;
-    }
-
-    // Adler-32 checksum (big-endian, per zlib spec)
-    const adler = std.hash.Adler32.hash(data);
-    var adler_bytes: [4]u8 = undefined;
-    std.mem.writeInt(u32, &adler_bytes, adler, .big);
-    try output.appendSlice(allocator, &adler_bytes);
-
-    return output.toOwnedSlice(allocator);
+    return @import("deflate_emit.zig").zlib(allocator, data);
 }
 
 /// Parse a PNG file into pixels and metadata.

@@ -307,44 +307,19 @@ pub fn createZip(allocator: Allocator, entries: []const ZipWriteEntry) ZipError!
     return result.toOwnedSlice() catch return error.OutOfMemory;
 }
 
-/// Encode data as raw deflate using stored blocks.
-/// Produces a valid deflate stream that decompresses to the original data.
-/// No actual compression — BLIP's LZMA2/zstd handles real compression.
+/// Encode data as raw deflate (no zlib framing).
+///
+/// Routes through `deflate_emit.rawDeflate` so all of blar's deflate emission
+/// flows through one chokepoint; see deflate_emit.zig for the architectural
+/// intent. When `deflate_fingerprint` lands, the call site here doesn't
+/// change — only the shim's body does.
+///
+/// Historical: this previously emitted spec-valid but not-actually-compressed
+/// stored-block-only output. Worked for the wild ZIP corpus that happened to
+/// use stored blocks themselves (e.g. karaoke .kar MIDI inside .zip), but
+/// would diverge dramatically on any modern ZIP with DEFLATE'd entries.
 fn deflateCompress(allocator: Allocator, data: []const u8) ![]u8 {
-    const max_block: usize = 65535;
-    const num_blocks = if (data.len == 0) 1 else (data.len + max_block - 1) / max_block;
-    // Each block: 1 byte header + 2 bytes LEN + 2 bytes NLEN + data
-    const out_size = num_blocks * 5 + data.len;
-    var result = try allocator.alloc(u8, out_size);
-    errdefer allocator.free(result);
-
-    var pos: usize = 0;
-    var out_pos: usize = 0;
-    var block_idx: usize = 0;
-    while (block_idx < num_blocks) : (block_idx += 1) {
-        const remaining = data.len - pos;
-        const block_len: u16 = @intCast(@min(remaining, max_block));
-        const is_final: u8 = if (block_idx == num_blocks - 1) 1 else 0;
-
-        // Block header: BFINAL=is_final, BTYPE=00 (stored)
-        result[out_pos] = is_final; // BFINAL | (BTYPE << 1), BTYPE=0
-        out_pos += 1;
-
-        // LEN (little-endian u16)
-        std.mem.writeInt(u16, result[out_pos..][0..2], block_len, .little);
-        out_pos += 2;
-
-        // NLEN = one's complement of LEN
-        std.mem.writeInt(u16, result[out_pos..][0..2], ~block_len, .little);
-        out_pos += 2;
-
-        // Raw data
-        @memcpy(result[out_pos..][0..block_len], data[pos..][0..block_len]);
-        out_pos += block_len;
-        pos += block_len;
-    }
-
-    return result;
+    return @import("deflate_emit.zig").rawDeflate(allocator, data);
 }
 
 // =============================================================================

@@ -15,3 +15,7 @@ inbox
 CLAUDE.md
 .direnv/
 zig-pkg/
+
+# Audit corpus + results
+tests/audit/corpus_local/
+tests/audit/results/

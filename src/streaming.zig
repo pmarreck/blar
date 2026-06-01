@@ -62,7 +62,7 @@ fn expandSlot(allocator: Allocator, entry: ArchiveEntry, slot: *ExpSlot, do_expa
                     // Skip .zip files with archive extensions unless expand_all_zips
                     if (codec_id == .zip and !expand_all_zips) {
                         if (isArchiveExtension(file.path)) {
-                            slot.result_entries.append(allocator, entry) catch {};
+                            slot.result_entries.append(allocator, entry) catch { slot.had_error = true; };
                             return;
                         }
                     }

@@ -2227,6 +2227,21 @@ export fn blar_create_streaming(
         read_bufs.deinit(page_allocator);
     }
 
+    // Pre-allocate a flat buffer for all xattr slices across all entries.
+    // Mirrors the non-streaming blip_archive_create pattern: one alloc, one
+    // free. Per-entry allocs (the previous approach) were never freed and
+    // leaked on every call.
+    var total_xattrs: usize = 0;
+    for (0..entry_count) |i| {
+        total_xattrs += c_entries[i].xattr_count;
+    }
+    var xattr_buf: []archive.XattrEntry = if (total_xattrs > 0)
+        page_allocator.alloc(archive.XattrEntry, total_xattrs) catch return -13
+    else
+        &[_]archive.XattrEntry{};
+    defer if (total_xattrs > 0) page_allocator.free(xattr_buf);
+    var xattr_offset: usize = 0;
+
     for (0..entry_count) |i| {
         const ce = c_entries[i];
         if (ce.is_dir != 0) {
@@ -2234,14 +2249,15 @@ export fn blar_create_streaming(
             const dir_xa: []const archive.XattrEntry = if (ce.xattrs) |xa_ptr| blk: {
                 const xa_count = ce.xattr_count;
                 if (xa_count == 0) break :blk &.{};
-                const xa_zig = page_allocator.alloc(archive.XattrEntry, xa_count) catch break :blk &[_]archive.XattrEntry{};
                 for (0..xa_count) |xi| {
-                    xa_zig[xi] = .{
+                    xattr_buf[xattr_offset + xi] = .{
                         .name = xa_ptr[xi].name[0..xa_ptr[xi].name_len],
                         .value = xa_ptr[xi].value[0..xa_ptr[xi].value_len],
                     };
                 }
-                break :blk xa_zig;
+                const slice = xattr_buf[xattr_offset .. xattr_offset + xa_count];
+                xattr_offset += xa_count;
+                break :blk slice;
             } else &.{};
 
             zig_entries[i] = .{ .dir = .{
@@ -2270,8 +2286,9 @@ export fn blar_create_streaming(
                 defer file.close(io);
                 var read_buf: [4096]u8 = undefined;
                 var file_reader = file.reader(io, &read_buf);
+                read_bufs.ensureUnusedCapacity(page_allocator, 1) catch return -13;
                 const data = file_reader.interface.allocRemaining(page_allocator, .unlimited) catch return -42;
-                read_bufs.append(page_allocator, data) catch return -13;
+                read_bufs.appendAssumeCapacity(data);
                 content = data;
             }
 
@@ -2279,14 +2296,15 @@ export fn blar_create_streaming(
             const xattr_slice: []const archive.XattrEntry = if (ce.xattrs) |xa_ptr| blk: {
                 const xa_count = ce.xattr_count;
                 if (xa_count == 0) break :blk &.{};
-                const xa_zig = page_allocator.alloc(archive.XattrEntry, xa_count) catch break :blk &[_]archive.XattrEntry{};
                 for (0..xa_count) |xi| {
-                    xa_zig[xi] = .{
+                    xattr_buf[xattr_offset + xi] = .{
                         .name = xa_ptr[xi].name[0..xa_ptr[xi].name_len],
                         .value = xa_ptr[xi].value[0..xa_ptr[xi].value_len],
                     };
                 }
-                break :blk xa_zig;
+                const slice = xattr_buf[xattr_offset .. xattr_offset + xa_count];
+                xattr_offset += xa_count;
+                break :blk slice;
             } else &.{};
 
             const rfork: []const u8 = if (ce.resource_fork) |rf| rf[0..ce.resource_fork_len] else &.{};
@@ -2693,7 +2711,9 @@ fn zipErrorCode(err: anytype) i32 {
     };
 }
 
-test "lib placeholder" {
+// Compile-only test: referencing the import forces it to be semantically
+// analysed in this translation unit. Not behavioral coverage by design.
+test "blip import is analysed" {
     _ = blip;
 }
 

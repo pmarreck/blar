@@ -873,14 +873,8 @@ fn findJpegStreamsLinear(allocator: Allocator, data: []const u8) ![]PdfJpegStrea
 // =============================================================================
 
 /// Zlib-decompress data. Caller owns returned slice.
-pub fn zlibDecompress(allocator: Allocator, compressed: []const u8) ![]u8 {
-    const flate = std.compress.flate;
-    var source_reader = std.Io.Reader.fixed(compressed);
-    var empty_buf: [0]u8 = .{};
-    var decompress_state = flate.Decompress.init(&source_reader, .zlib, &empty_buf);
-    return decompress_state.reader.allocRemaining(allocator, .unlimited) catch
-        return error.InvalidData;
-}
+/// Shared body in zlib_io.zig (also used by png.zig).
+pub const zlibDecompress = @import("zlib_io.zig").zlibDecompress;
 
 const c_zlib = @cImport(@cInclude("zlib.h"));
 
@@ -994,15 +988,7 @@ pub fn gzipGuessLevel(allocator: Allocator, compressed: []const u8, decompressed
     return 9;
 }
 
-fn paethPredictor(a: i16, b: i16, c: i16) u8 {
-    const p = a + b - c;
-    const pa = @as(u16, @intCast(if (p > a) p - a else a - p));
-    const pb = @as(u16, @intCast(if (p > b) p - b else b - p));
-    const pc = @as(u16, @intCast(if (p > c) p - c else c - p));
-    if (pa <= pb and pa <= pc) return @intCast(@as(u16, @intCast(a)));
-    if (pb <= pc) return @intCast(@as(u16, @intCast(b)));
-    return @intCast(@as(u16, @intCast(c)));
-}
+const paethPredictor = @import("png_predictor.zig").paethPredictor;
 
 /// Remove PNG-style row filters from FlateDecode image data.
 /// Predictor 10 = None, 11 = Sub, 12 = Up, 13 = Average, 14 = Paeth (fixed per stream)

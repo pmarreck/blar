@@ -82,15 +82,7 @@ fn parseIhdr(data: []const u8) PngError!PngInfo {
 }
 
 /// Paeth predictor for PNG row filtering.
-fn paethPredictor(a_i: i16, b_i: i16, c_i: i16) u8 {
-    const p = a_i + b_i - c_i;
-    const pa = @as(u16, @intCast(if (p - a_i < 0) -(p - a_i) else p - a_i));
-    const pb = @as(u16, @intCast(if (p - b_i < 0) -(p - b_i) else p - b_i));
-    const pc = @as(u16, @intCast(if (p - c_i < 0) -(p - c_i) else p - c_i));
-    if (pa <= pb and pa <= pc) return @intCast(@as(u16, @intCast(a_i)));
-    if (pb <= pc) return @intCast(@as(u16, @intCast(b_i)));
-    return @intCast(@as(u16, @intCast(c_i)));
-}
+const paethPredictor = @import("png_predictor.zig").paethPredictor;
 
 /// Defilter a single row of PNG data.
 fn defilterRow(row: []u8, prev_row: ?[]const u8, bpp: usize) PngError!void {
@@ -185,13 +177,12 @@ fn adam7PassSize(width: u32, height: u32, pass: Adam7Pass) struct { w: u32, h: u
 }
 
 /// Zlib-decompress data into a caller-owned buffer.
+const zlib_io = @import("zlib_io.zig");
+
+/// Zlib-decompress IDAT data, mapping any failure to PngError.CorruptedData.
+/// Shared decompression body lives in zlib_io.zig (also used by pdf.zig).
 fn zlibDecompress(allocator: Allocator, compressed: []const u8) ![]u8 {
-    const flate = std.compress.flate;
-    var source_reader = std.Io.Reader.fixed(compressed);
-    var empty_buf: [0]u8 = .{};
-    var decompress_state = flate.Decompress.init(&source_reader, .zlib, &empty_buf);
-    return decompress_state.reader.allocRemaining(allocator, .unlimited) catch
-        return PngError.CorruptedData;
+    return zlib_io.zlibDecompress(allocator, compressed) catch return PngError.CorruptedData;
 }
 
 /// Zlib-compress PNG IDAT data.

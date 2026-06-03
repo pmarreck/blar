@@ -42,13 +42,9 @@ pub fn isAiffMagic(buf: []const u8) bool {
         std.mem.eql(u8, buf[8..12], &AIFF_C_MAGIC));
 }
 
-fn readU16BE(buf: []const u8) u16 {
-    return std.mem.readInt(u16, buf[0..2], .big);
-}
-
-fn readU32BE(buf: []const u8) u32 {
-    return std.mem.readInt(u32, buf[0..4], .big);
-}
+const endian = @import("endian.zig");
+const readU16BE = endian.readU16BE;
+const readU32BE = endian.readU32BE;
 /// Parse 80-bit IEEE 754 extended precision to u32 (for sample rate).
 /// AIFF stores sample rate as 80-bit extended float.
 fn parseExtended80(buf: []const u8) u32 {

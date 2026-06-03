@@ -53,17 +53,10 @@ pub fn isNiftiMagic(buf: []const u8) bool {
         (buf[344] == 'n' and buf[345] == 'i' and buf[346] == '1' and buf[347] == 0);
 }
 
-fn readU16LE(buf: []const u8) u16 {
-    return std.mem.readInt(u16, buf[0..2], .little);
-}
-
-fn readU32LE(buf: []const u8) u32 {
-    return std.mem.readInt(u32, buf[0..4], .little);
-}
-
-fn readU32BE(buf: []const u8) u32 {
-    return std.mem.readInt(u32, buf[0..4], .big);
-}
+const endian = @import("endian.zig");
+const readU16LE = endian.readU16LE;
+const readU32LE = endian.readU32LE;
+const readU32BE = endian.readU32BE;
 
 fn readF32LE(buf: []const u8) f32 {
     return @bitCast(std.mem.readInt(u32, buf[0..4], .little));

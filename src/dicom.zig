@@ -40,13 +40,9 @@ pub fn isDicomMagic(buf: []const u8) bool {
     return std.mem.eql(u8, buf[128..132], DICM_MAGIC);
 }
 
-fn readU16LE(buf: []const u8) u16 {
-    return std.mem.readInt(u16, buf[0..2], .little);
-}
-
-fn readU32LE(buf: []const u8) u32 {
-    return std.mem.readInt(u32, buf[0..4], .little);
-}
+const endian = @import("endian.zig");
+const readU16LE = endian.readU16LE;
+const readU32LE = endian.readU32LE;
 /// Check if a VR is explicit (2-char ASCII tag).
 fn isExplicitVR(vr: []const u8) bool {
     if (vr.len < 2) return false;

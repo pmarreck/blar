@@ -49,14 +49,9 @@ pub fn isBmpMagic(buf: []const u8) bool {
 }
 
 /// Read a little-endian u16 from a byte slice.
-fn readU16LE(buf: []const u8) u16 {
-    return std.mem.readInt(u16, buf[0..2], .little);
-}
-
-/// Read a little-endian u32 from a byte slice.
-fn readU32LE(buf: []const u8) u32 {
-    return std.mem.readInt(u32, buf[0..4], .little);
-}
+const endian = @import("endian.zig");
+const readU16LE = endian.readU16LE;
+const readU32LE = endian.readU32LE;
 
 /// Read a little-endian i32 from a byte slice.
 fn readI32LE(buf: []const u8) i32 {

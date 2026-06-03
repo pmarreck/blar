@@ -1049,7 +1049,10 @@ export fn blar_entry_zip_comp(
 // ---------------------------------------------------------------------------
 
 const pdf_mod = @import("pdf.zig");
-const jxl_mod = @import("jxl.zig");
+// Gated on `enable_image`: when image support is off, select a stub with no
+// libjxl `@cImport`, so consumers needing only BLIP compression don't pull in
+// libjxl headers/libs. See jxl_stub.zig.
+const jxl_mod = if (@import("build_options").enable_image) @import("jxl.zig") else @import("jxl_stub.zig");
 const png_mod = @import("png.zig");
 const bmp_mod = @import("bmp.zig");
 const tar_mod = @import("tar.zig");

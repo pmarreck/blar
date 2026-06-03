@@ -22,7 +22,8 @@ const fits_mod = @import("fits.zig");
 const nifti_mod = @import("nifti.zig");
 const dicom_mod = @import("dicom.zig");
 const flac_mod = @import("flac.zig");
-const jxl_mod = @import("jxl.zig");
+// Gated on `enable_image` (see lib.zig / jxl_stub.zig): stub avoids libjxl.
+const jxl_mod = if (build_options.enable_image) @import("jxl.zig") else @import("jxl_stub.zig");
 const pdf_mod = @import("pdf.zig");
 const zip_mod = @import("zip.zig");
 
@@ -1493,7 +1494,7 @@ test "microbench: BMP expansion 64x64" {
 test "microbench: JPEG→JXL transcode 8x8" {
     if (builtin.mode == .Debug) return;
 
-    const jxl_local = @import("jxl.zig");
+    const jxl_local = if (build_options.enable_image) @import("jxl.zig") else @import("jxl_stub.zig");
     const alloc = testing.allocator;
 
     // Minimal 8x8 JPEG from test suite

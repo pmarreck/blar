@@ -20,9 +20,21 @@ pub fn build(b: *std.Build) void {
         "Enable FLAC audio codec support (WAV/AIFF container expansion). Default: true.",
     ) orelse true;
 
+    // When false, blar is built without libjxl (JPEG↔JXL / pixel↔JXL transcode).
+    // The jxl.zig module — and its `@cImport` of the libjxl headers — is replaced
+    // by jxl_stub.zig, and libjxl/libjxl_threads are not linked. zlib is NOT
+    // affected (deflate_emit.zig needs it for PNG/ZIP regardless). Lets consumers
+    // that only want BLIP compression (e.g. difz) avoid the libjxl C++ dep tree.
+    const enable_image = b.option(
+        bool,
+        "enable_image",
+        "Enable JXL image transcode support (requires libjxl). Default: true.",
+    ) orelse true;
+
     const build_options = b.addOptions();
     build_options.addOption(bool, "enable_compression", enable_compression);
     build_options.addOption(bool, "enable_flac", enable_flac);
+    build_options.addOption(bool, "enable_image", enable_image);
 
     // printable-binary module (vendored) — needed by static lib for peek FFI
     const pb_module = b.createModule(.{
@@ -95,21 +107,31 @@ pub fn build(b: *std.Build) void {
     const zlib_lib_path = b.option([]const u8, "zlib-lib-path", "Path to zlib libraries");
 
     // Helpers — attach codec deps to a module.
+    //
+    // zlib is required by deflate_emit.zig (PNG/ZIP deflate emission) regardless
+    // of image support, so it is attached unconditionally via addZlibSupport.
+    // libjxl is only needed for JXL transcode and is gated behind enable_image.
+    const addZlibSupport = struct {
+        fn apply(
+            module: *std.Build.Module,
+            z_inc: ?[]const u8,
+            z_lib: ?[]const u8,
+        ) void {
+            if (z_inc) |zi| module.addSystemIncludePath(.{ .cwd_relative = zi });
+            if (z_lib) |zl| module.addLibraryPath(.{ .cwd_relative = zl });
+            module.linkSystemLibrary("z", .{});
+        }
+    }.apply;
     const addJxlSupport = struct {
         fn apply(
             module: *std.Build.Module,
             inc_path: ?[]const u8,
             lib_path: ?[]const u8,
-            z_inc: ?[]const u8,
-            z_lib: ?[]const u8,
         ) void {
             if (inc_path) |inc| module.addSystemIncludePath(.{ .cwd_relative = inc });
             if (lib_path) |lib| module.addLibraryPath(.{ .cwd_relative = lib });
-            if (z_inc) |zi| module.addSystemIncludePath(.{ .cwd_relative = zi });
-            if (z_lib) |zl| module.addLibraryPath(.{ .cwd_relative = zl });
             module.linkSystemLibrary("jxl", .{});
             module.linkSystemLibrary("jxl_threads", .{});
-            module.linkSystemLibrary("z", .{});
         }
     }.apply;
 
@@ -149,7 +171,8 @@ pub fn build(b: *std.Build) void {
         }),
     });
     static_lib.root_module.addOptions("build_options", build_options);
-    addJxlSupport(static_lib.root_module, jxl_include_path, jxl_lib_path, zlib_include_path, zlib_lib_path);
+    addZlibSupport(static_lib.root_module, zlib_include_path, zlib_lib_path);
+    if (enable_image) addJxlSupport(static_lib.root_module, jxl_include_path, jxl_lib_path);
     if (enable_compression) {
         addCompressionSupport(static_lib.root_module, z7z_module, bzip2z_module, lz4_lib, zstdz_lib);
     }
@@ -177,7 +200,8 @@ pub fn build(b: *std.Build) void {
         },
     });
     blar_module.addOptions("build_options", build_options);
-    addJxlSupport(blar_module, jxl_include_path, jxl_lib_path, zlib_include_path, zlib_lib_path);
+    addZlibSupport(blar_module, zlib_include_path, zlib_lib_path);
+    if (enable_image) addJxlSupport(blar_module, jxl_include_path, jxl_lib_path);
     if (enable_compression) {
         addCompressionSupport(blar_module, z7z_module, bzip2z_module, lz4_lib, zstdz_lib);
     }
@@ -241,7 +265,8 @@ pub fn build(b: *std.Build) void {
         },
     });
     ffi_test_module.addOptions("build_options", build_options);
-    addJxlSupport(ffi_test_module, jxl_include_path, jxl_lib_path, zlib_include_path, zlib_lib_path);
+    addZlibSupport(ffi_test_module, zlib_include_path, zlib_lib_path);
+    if (enable_image) addJxlSupport(ffi_test_module, jxl_include_path, jxl_lib_path);
     if (enable_compression) {
         addCompressionSupport(ffi_test_module, z7z_module, bzip2z_module, lz4_lib, zstdz_lib);
     }

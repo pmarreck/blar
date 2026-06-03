@@ -121,6 +121,16 @@ fn expandSlot(allocator: Allocator, entry: ArchiveEntry, slot: *ExpSlot, do_expa
     }
 }
 
+/// Pure classifier over the expansion slot set: returns error.OutOfMemory if
+/// ANY slot dropped an entry (had_error) due to allocation failure, so the
+/// caller never emits a silently-truncated archive. Tested as a classifier
+/// over sets, not single predicates.
+fn checkSlotsComplete(slots: []const ExpSlot) error{OutOfMemory}!void {
+    for (slots) |slot| {
+        if (slot.had_error) return error.OutOfMemory;
+    }
+}
+
 /// One entry in the spill index.
 const SpillEntry = struct {
     /// Offset in the spill file where serialized bytes start.
@@ -265,12 +275,10 @@ pub fn createArchiveStreaming(
         }
     }
 
-    // Check for expansion errors
-    for (slots) |*slot| {
-        if (slot.had_error) {
-            // Log but don't fail — treat as opaque file (expansion skipped)
-        }
-    }
+    // An entry was dropped because an allocation failed mid-expansion.
+    // Surface it as OOM rather than emitting a silently-truncated archive
+    // (the worst failure mode for an archiver).
+    try checkSlotsComplete(slots);
 
     // Flatten slots into final entry list
     var work_entries: std.ArrayList(ArchiveEntry) = .empty;
@@ -534,4 +542,18 @@ test "streaming with compression produces byte-identical archive" {
 
     try testing.expectEqual(inmem.len, streamed.len);
     try testing.expectEqualSlices(u8, inmem, streamed);
+}
+
+test "checkSlotsComplete flags any slot that dropped an entry" {
+    const ok: ExpSlot = .{ .result_entries = .empty, .paths = .empty, .contents = .empty, .has_dir = false, .had_error = false };
+    const bad: ExpSlot = .{ .result_entries = .empty, .paths = .empty, .contents = .empty, .has_dir = false, .had_error = true };
+
+    // Empty and all-OK sets are complete.
+    try checkSlotsComplete(&[_]ExpSlot{});
+    try checkSlotsComplete(&[_]ExpSlot{ ok, ok });
+
+    // A single dropped entry anywhere in the set fails the whole archive.
+    try testing.expectError(error.OutOfMemory, checkSlotsComplete(&[_]ExpSlot{ ok, bad }));
+    try testing.expectError(error.OutOfMemory, checkSlotsComplete(&[_]ExpSlot{ bad, ok, ok }));
+    try testing.expectError(error.OutOfMemory, checkSlotsComplete(&[_]ExpSlot{bad}));
 }

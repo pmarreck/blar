@@ -7,7 +7,7 @@ Current work is ordered below. The original split checklist is preserved in docs
 - [x] Reconcile published work from 26212c7 and 14fbf3f onto yolo, retaining the specification and intentional obsolete-link deletions (done 2026-09-27 14:42 EDT).
 - [x] Establish INTENT.md around internal recompression, reconstruction limits, and PowerArchiver prior art; migrate the overview and refresh file-purpose notes (done 2026-09-27 14:42 EDT).
 - [x] Verify the optimized package, all 584 master-suite checks, and the sandboxed Nix test target (done 2026-09-27 14:42 EDT).
-- [ ] Push reconciled yolo and confirm exact-commit CI; leave git status clean.
+- [x] Push reconciled yolo, verify remote equality and clean status, and confirm Mechatron admits eef68d5 (done 2026-09-27 14:44 EDT).
 
 ## Follow-up work
 

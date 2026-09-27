@@ -89,3 +89,10 @@ installed-artifact check, 584 checks through
 No archiver-core source files were changed during reconciliation. The safety
 snapshot is retained in Git stash and `/tmp/blar-reconcile.p2IXOq`; the feature
 itself is also preserved in the published commits above.
+
+Merge commit `eef68d5489d9787f61273a7004f85aad03c20af3` has parents `26212c7`
+and `14fbf3f`. It was pushed to `yolo`, independently fetched and compared to
+local HEAD, with a clean working tree. Mechatron admitted that exact commit
+at 14:43 EDT and began its native package target. The existing webhook works;
+the hook-administration authentication issue did not block delivery. Consult
+`mechatron-ci log --project blar --commit eef68d5 --json` for its final result.

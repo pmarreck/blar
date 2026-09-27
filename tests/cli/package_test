@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -u
+
+# Exercise the installed artifact, including its runtime loader and libraries.
+project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+package_root=${1:-"$project_dir/result"}
+output=$("$package_root/bin/blar" --version 2>&1)
+rc=$?
+if (( rc != 0 )); then
+	printf 'FAIL: packaged blar cannot run (exit %s): %s\n' "$rc" "$output"
+	exit 1
+fi
+case "$output" in
+	blar\ *) printf 'Results: 1 passed, 0 failed\n' ;;
+	*) printf 'FAIL: unexpected packaged version output: %s\n' "$output"; exit 1 ;;
+esac

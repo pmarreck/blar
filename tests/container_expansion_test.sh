@@ -400,10 +400,10 @@ python3 -c "import sys; sys.stdout.buffer.write(b'ABCDEFGHIJ' * 10000)" | gzip -
 mkdir -p "$TMPDIR_TEST/t14/out"
 "$BLAR" extract "$TMPDIR_TEST/t14/archive.blar" -f -C "$TMPDIR_TEST/t14/out" 2>/dev/null
 
-ORIG_MD5=$(gunzip -c "$TMPDIR_TEST/t14/input/fast.gz" | md5)
-EXTRACTED_MD5=$(gunzip -c "$TMPDIR_TEST/t14/out/input/fast.gz" 2>/dev/null | md5)
+ORIG_SHA=$(gunzip -c "$TMPDIR_TEST/t14/input/fast.gz" | sha256sum)
+EXTRACTED_SHA=$(gunzip -c "$TMPDIR_TEST/t14/out/input/fast.gz" 2>/dev/null | sha256sum)
 
-if [[ "$ORIG_MD5" == "$EXTRACTED_MD5" ]]; then
+if [[ "$ORIG_SHA" == "$EXTRACTED_SHA" ]]; then
   pass "gzip level: content identical after roundtrip"
 else
   fail "gzip level: content differs"
@@ -444,7 +444,7 @@ with open(sys.argv[1], 'wb') as f:
 
 mkdir -p "$TMPDIR_TEST/t15/input"
 cp "$TMPDIR_TEST/t15_input.bmp" "$TMPDIR_TEST/t15/input/test.bmp"
-ORIG_MD5=$(md5 < "$TMPDIR_TEST/t15/input/test.bmp")
+ORIG_SHA=$(sha256sum < "$TMPDIR_TEST/t15/input/test.bmp")
 
 # Create archive (should expand BMP container)
 (cd "$TMPDIR_TEST/t15" && "$BLAR" create -z -f -o "$TMPDIR_TEST/t15/archive.blar" input 2>/dev/null)
@@ -460,9 +460,9 @@ fi
 # Extract and verify roundtrip
 mkdir -p "$TMPDIR_TEST/t15/out"
 "$BLAR" extract "$TMPDIR_TEST/t15/archive.blar" -f -C "$TMPDIR_TEST/t15/out" 2>/dev/null
-EXTRACTED_MD5=$(md5 < "$TMPDIR_TEST/t15/out/input/test.bmp" 2>/dev/null)
+EXTRACTED_SHA=$(sha256sum < "$TMPDIR_TEST/t15/out/input/test.bmp" 2>/dev/null)
 
-if [[ "$ORIG_MD5" == "$EXTRACTED_MD5" ]]; then
+if [[ "$ORIG_SHA" == "$EXTRACTED_SHA" ]]; then
   pass "BMP container: byte-identical roundtrip"
 else
   fail "BMP container: extracted file differs from original"
@@ -529,7 +529,7 @@ tar cf "$TMPDIR_TEST/t17/test.tar" -C "$TMPDIR_TEST/t17" tartest 2>/dev/null
 
 mkdir -p "$TMPDIR_TEST/t17/input"
 cp "$TMPDIR_TEST/t17/test.tar" "$TMPDIR_TEST/t17/input/"
-ORIG_MD5=$(md5 < "$TMPDIR_TEST/t17/input/test.tar")
+ORIG_SHA=$(sha256sum < "$TMPDIR_TEST/t17/input/test.tar")
 
 # Create archive with expansion
 (cd "$TMPDIR_TEST/t17" && "$BLAR" create -z -f -o "$TMPDIR_TEST/t17/archive.blar" input 2>/dev/null)
@@ -557,12 +557,12 @@ fi
 # Extract and verify roundtrip
 mkdir -p "$TMPDIR_TEST/t17/out"
 "$BLAR" extract "$TMPDIR_TEST/t17/archive.blar" -f -C "$TMPDIR_TEST/t17/out" 2>/dev/null
-EXTRACTED_MD5=$(md5 < "$TMPDIR_TEST/t17/out/input/test.tar" 2>/dev/null)
+EXTRACTED_SHA=$(sha256sum < "$TMPDIR_TEST/t17/out/input/test.tar" 2>/dev/null)
 
-if [[ "$ORIG_MD5" == "$EXTRACTED_MD5" ]]; then
+if [[ "$ORIG_SHA" == "$EXTRACTED_SHA" ]]; then
   pass "tar container: byte-identical roundtrip"
 else
-  fail "tar container: extracted file differs from original (orig=$ORIG_MD5 ext=$EXTRACTED_MD5)"
+  fail "tar container: extracted file differs from original (orig=$ORIG_SHA ext=$EXTRACTED_SHA)"
 fi
 
 
@@ -602,7 +602,7 @@ with open(sys.argv[1], 'wb') as f:
 
 mkdir -p "$TMPDIR_TEST/t18/input"
 cp "$TMPDIR_TEST/t18_input.tiff" "$TMPDIR_TEST/t18/input/test.tiff"
-ORIG_MD5=$(md5 < "$TMPDIR_TEST/t18/input/test.tiff")
+ORIG_SHA=$(sha256sum < "$TMPDIR_TEST/t18/input/test.tiff")
 
 # Create archive with expansion
 (cd "$TMPDIR_TEST/t18" && "$BLAR" create -z -f -o "$TMPDIR_TEST/t18/archive.blar" input 2>/dev/null)
@@ -628,9 +628,9 @@ fi
 # Extract and verify roundtrip
 mkdir -p "$TMPDIR_TEST/t18/out"
 "$BLAR" extract "$TMPDIR_TEST/t18/archive.blar" -f -C "$TMPDIR_TEST/t18/out" 2>/dev/null
-EXTRACTED_MD5=$(md5 < "$TMPDIR_TEST/t18/out/input/test.tiff" 2>/dev/null)
+EXTRACTED_SHA=$(sha256sum < "$TMPDIR_TEST/t18/out/input/test.tiff" 2>/dev/null)
 
-if [[ "$ORIG_MD5" == "$EXTRACTED_MD5" ]]; then
+if [[ "$ORIG_SHA" == "$EXTRACTED_SHA" ]]; then
   pass "TIFF container: byte-identical roundtrip"
 else
   fail "TIFF container: extracted file differs from original"
@@ -661,18 +661,18 @@ with open(sys.argv[1], 'wb') as f:
 
 mkdir -p "$TMPDIR_TEST/t19/input"
 cp "$TMPDIR_TEST/t19_input.gif" "$TMPDIR_TEST/t19/input/test.gif"
-ORIG_MD5=$(md5 < "$TMPDIR_TEST/t19/input/test.gif")
+ORIG_SHA=$(sha256sum < "$TMPDIR_TEST/t19/input/test.gif")
 
 (cd "$TMPDIR_TEST/t19" && "$BLAR" create -z -f -o "$TMPDIR_TEST/t19/archive.blar" input 2>/dev/null)
 
 mkdir -p "$TMPDIR_TEST/t19/out"
 "$BLAR" extract "$TMPDIR_TEST/t19/archive.blar" -f -C "$TMPDIR_TEST/t19/out" 2>/dev/null
-EXTRACTED_MD5=$(md5 < "$TMPDIR_TEST/t19/out/input/test.gif" 2>/dev/null)
+EXTRACTED_SHA=$(sha256sum < "$TMPDIR_TEST/t19/out/input/test.gif" 2>/dev/null)
 
-if [[ "$ORIG_MD5" == "$EXTRACTED_MD5" ]]; then
+if [[ "$ORIG_SHA" == "$EXTRACTED_SHA" ]]; then
   pass "GIF: checksum-verified roundtrip"
 else
-  fail "GIF: roundtrip checksum mismatch (orig=$ORIG_MD5 ext=$EXTRACTED_MD5)"
+  fail "GIF: roundtrip checksum mismatch (orig=$ORIG_SHA ext=$EXTRACTED_SHA)"
 fi
 
 
@@ -698,7 +698,7 @@ with open(sys.argv[1], 'wb') as f:
 
 mkdir -p "$TMPDIR_TEST/t20/input"
 cp "$TMPDIR_TEST/t20_input.tga" "$TMPDIR_TEST/t20/input/test.tga"
-ORIG_MD5=$(md5 < "$TMPDIR_TEST/t20/input/test.tga")
+ORIG_SHA=$(sha256sum < "$TMPDIR_TEST/t20/input/test.tga")
 ORIG_SIZE=$(stat -f%z "$TMPDIR_TEST/t20/input/test.tga" 2>/dev/null || stat -c%s "$TMPDIR_TEST/t20/input/test.tga" 2>/dev/null)
 
 # Create with expansion
@@ -727,12 +727,12 @@ fi
 # Extract and checksum verify
 mkdir -p "$TMPDIR_TEST/t20/out"
 "$BLAR" extract "$TMPDIR_TEST/t20/expanded.blar" -f -C "$TMPDIR_TEST/t20/out" 2>/dev/null
-EXTRACTED_MD5=$(md5 < "$TMPDIR_TEST/t20/out/input/test.tga" 2>/dev/null)
+EXTRACTED_SHA=$(sha256sum < "$TMPDIR_TEST/t20/out/input/test.tga" 2>/dev/null)
 
-if [[ "$ORIG_MD5" == "$EXTRACTED_MD5" ]]; then
+if [[ "$ORIG_SHA" == "$EXTRACTED_SHA" ]]; then
   pass "TGA container: checksum-verified byte-identical roundtrip"
 else
-  fail "TGA container: checksum mismatch (orig=$ORIG_MD5 ext=$EXTRACTED_MD5)"
+  fail "TGA container: checksum mismatch (orig=$ORIG_SHA ext=$EXTRACTED_SHA)"
 fi
 
 
@@ -758,7 +758,7 @@ with open(sys.argv[1], 'wb') as f:
 
 mkdir -p "$TMPDIR_TEST/t21/input"
 cp "$TMPDIR_TEST/t21_input.wav" "$TMPDIR_TEST/t21/input/test.wav"
-ORIG_MD5=$(md5 < "$TMPDIR_TEST/t21/input/test.wav")
+ORIG_SHA=$(sha256sum < "$TMPDIR_TEST/t21/input/test.wav")
 
 # Create with expansion
 (cd "$TMPDIR_TEST/t21" && "$BLAR" create -z -f -o "$TMPDIR_TEST/t21/expanded.blar" input 2>/dev/null)
@@ -789,12 +789,12 @@ fi
 # Checksum roundtrip
 mkdir -p "$TMPDIR_TEST/t21/out"
 "$BLAR" extract "$TMPDIR_TEST/t21/expanded.blar" -f -C "$TMPDIR_TEST/t21/out" 2>/dev/null
-EXTRACTED_MD5=$(md5 < "$TMPDIR_TEST/t21/out/input/test.wav" 2>/dev/null)
+EXTRACTED_SHA=$(sha256sum < "$TMPDIR_TEST/t21/out/input/test.wav" 2>/dev/null)
 
-if [[ "$ORIG_MD5" == "$EXTRACTED_MD5" ]]; then
+if [[ "$ORIG_SHA" == "$EXTRACTED_SHA" ]]; then
   pass "WAV container: checksum-verified byte-identical roundtrip"
 else
-  fail "WAV container: checksum mismatch (orig=$ORIG_MD5 ext=$EXTRACTED_MD5)"
+  fail "WAV container: checksum mismatch (orig=$ORIG_SHA ext=$EXTRACTED_SHA)"
 fi
 
 
@@ -826,7 +826,7 @@ with open(sys.argv[1], 'wb') as f:
 
 mkdir -p "$TMPDIR_TEST/t22/input"
 cp "$TMPDIR_TEST/t22_input.aiff" "$TMPDIR_TEST/t22/input/test.aiff"
-ORIG_MD5=$(md5 < "$TMPDIR_TEST/t22/input/test.aiff")
+ORIG_SHA=$(sha256sum < "$TMPDIR_TEST/t22/input/test.aiff")
 
 (cd "$TMPDIR_TEST/t22" && "$BLAR" create -z -f -o "$TMPDIR_TEST/t22/archive.blar" input 2>/dev/null)
 
@@ -841,12 +841,12 @@ fi
 
 mkdir -p "$TMPDIR_TEST/t22/out"
 "$BLAR" extract "$TMPDIR_TEST/t22/archive.blar" -f -C "$TMPDIR_TEST/t22/out" 2>/dev/null
-EXTRACTED_MD5=$(md5 < "$TMPDIR_TEST/t22/out/input/test.aiff" 2>/dev/null)
+EXTRACTED_SHA=$(sha256sum < "$TMPDIR_TEST/t22/out/input/test.aiff" 2>/dev/null)
 
-if [[ "$ORIG_MD5" == "$EXTRACTED_MD5" ]]; then
+if [[ "$ORIG_SHA" == "$EXTRACTED_SHA" ]]; then
   pass "AIFF container: checksum-verified roundtrip"
 else
-  fail "AIFF container: checksum mismatch (orig=$ORIG_MD5 ext=$EXTRACTED_MD5)"
+  fail "AIFF container: checksum mismatch (orig=$ORIG_SHA ext=$EXTRACTED_SHA)"
 fi
 
 
@@ -881,7 +881,7 @@ with open(sys.argv[1], 'wb') as f: f.write(buf)
 
 mkdir -p "$TMPDIR_TEST/t23/input"
 cp "$TMPDIR_TEST/t23_input.fits" "$TMPDIR_TEST/t23/input/test.fits"
-ORIG_MD5=$(md5 < "$TMPDIR_TEST/t23/input/test.fits")
+ORIG_SHA=$(sha256sum < "$TMPDIR_TEST/t23/input/test.fits")
 
 (cd "$TMPDIR_TEST/t23" && "$BLAR" create -z -f -o "$TMPDIR_TEST/t23/expanded.blar" input 2>/dev/null)
 (cd "$TMPDIR_TEST/t23" && "$BLAR" create -z -f --no-expand-containers -o "$TMPDIR_TEST/t23/opaque.blar" input 2>/dev/null)
@@ -904,12 +904,12 @@ fi
 
 mkdir -p "$TMPDIR_TEST/t23/out"
 "$BLAR" extract "$TMPDIR_TEST/t23/expanded.blar" -f -C "$TMPDIR_TEST/t23/out" 2>/dev/null
-EXTRACTED_MD5=$(md5 < "$TMPDIR_TEST/t23/out/input/test.fits" 2>/dev/null)
+EXTRACTED_SHA=$(sha256sum < "$TMPDIR_TEST/t23/out/input/test.fits" 2>/dev/null)
 
-if [[ "$ORIG_MD5" == "$EXTRACTED_MD5" ]]; then
+if [[ "$ORIG_SHA" == "$EXTRACTED_SHA" ]]; then
   pass "FITS container: checksum-verified roundtrip"
 else
-  fail "FITS container: checksum mismatch (orig=$ORIG_MD5 ext=$EXTRACTED_MD5)"
+  fail "FITS container: checksum mismatch (orig=$ORIG_SHA ext=$EXTRACTED_SHA)"
 fi
 
 
@@ -931,7 +931,7 @@ with open(sys.argv[1],'wb') as f: f.write(buf)
 
 mkdir -p "$TMPDIR_TEST/t24/input"
 cp "$TMPDIR_TEST/t24_input.nii" "$TMPDIR_TEST/t24/input/brain.nii"
-ORIG_MD5=$(md5 < "$TMPDIR_TEST/t24/input/brain.nii")
+ORIG_SHA=$(sha256sum < "$TMPDIR_TEST/t24/input/brain.nii")
 
 (cd "$TMPDIR_TEST/t24" && "$BLAR" create -z -f -o "$TMPDIR_TEST/t24/expanded.blar" input 2>/dev/null)
 (cd "$TMPDIR_TEST/t24" && "$BLAR" create -z -f --no-expand-containers -o "$TMPDIR_TEST/t24/opaque.blar" input 2>/dev/null)
@@ -956,12 +956,12 @@ fi
 
 mkdir -p "$TMPDIR_TEST/t24/out"
 "$BLAR" extract "$TMPDIR_TEST/t24/expanded.blar" -f -C "$TMPDIR_TEST/t24/out" 2>/dev/null
-EXTRACTED_MD5=$(md5 < "$TMPDIR_TEST/t24/out/input/brain.nii" 2>/dev/null)
+EXTRACTED_SHA=$(sha256sum < "$TMPDIR_TEST/t24/out/input/brain.nii" 2>/dev/null)
 
-if [[ "$ORIG_MD5" == "$EXTRACTED_MD5" ]]; then
+if [[ "$ORIG_SHA" == "$EXTRACTED_SHA" ]]; then
   pass "NIfTI container: checksum-verified byte-identical roundtrip"
 else
-  fail "NIfTI container: checksum mismatch (orig=$ORIG_MD5 ext=$EXTRACTED_MD5)"
+  fail "NIfTI container: checksum mismatch (orig=$ORIG_SHA ext=$EXTRACTED_SHA)"
 fi
 
 
@@ -1001,7 +1001,7 @@ with open(sys.argv[1], 'wb') as f:
 
 mkdir -p "$TMPDIR_TEST/t25/input"
 cp "$TMPDIR_TEST/t25_input.dcm" "$TMPDIR_TEST/t25/input/scan.dcm"
-ORIG_MD5=$(md5 < "$TMPDIR_TEST/t25/input/scan.dcm")
+ORIG_SHA=$(sha256sum < "$TMPDIR_TEST/t25/input/scan.dcm")
 
 (cd "$TMPDIR_TEST/t25" && "$BLAR" create -z -f -o "$TMPDIR_TEST/t25/archive.blar" input 2>/dev/null)
 
@@ -1014,12 +1014,12 @@ fi
 
 mkdir -p "$TMPDIR_TEST/t25/out"
 "$BLAR" extract "$TMPDIR_TEST/t25/archive.blar" -f -C "$TMPDIR_TEST/t25/out" 2>/dev/null
-EXTRACTED_MD5=$(md5 < "$TMPDIR_TEST/t25/out/input/scan.dcm" 2>/dev/null)
+EXTRACTED_SHA=$(sha256sum < "$TMPDIR_TEST/t25/out/input/scan.dcm" 2>/dev/null)
 
-if [[ "$ORIG_MD5" == "$EXTRACTED_MD5" ]]; then
+if [[ "$ORIG_SHA" == "$EXTRACTED_SHA" ]]; then
   pass "DICOM container: checksum-verified roundtrip"
 else
-  fail "DICOM container: checksum mismatch (orig=$ORIG_MD5 ext=$EXTRACTED_MD5)"
+  fail "DICOM container: checksum mismatch (orig=$ORIG_SHA ext=$EXTRACTED_SHA)"
 fi
 
 # =============================================================================

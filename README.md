@@ -1,6 +1,6 @@
 # blar — BLAR archive format and tool
 
-[![built with garnix](https://img.shields.io/endpoint.svg?url=https%3A%2F%2Fgarnix.io%2Fapi%2Fbadges%2Fpmarreck%2Fblar)](https://garnix.io/repo/pmarreck/blar)
+[![Mechatron Prime CI](https://img.shields.io/endpoint?url=https%3A%2F%2Fthelio-nixos.tail66c90.ts.net%2Fbadges%2Fblar.json&style=for-the-badge)](https://thelio-nixos.tail66c90.ts.net/mechatron-prime/)
 
 `blar` is a deterministic, integrity-verified, structurally introspectable archive format with a `tar`-like CLI. Think `tar`, but with BLAKE3-128 outer + xxHash64 inner integrity, O(1) random access via end-of-container index tables, built-in LZMA2 compression and AEAD encryption, structural inspection via path expressions (`peek`/`poke`), JSON round-tripping (`to-json`/`from-json`), printable-binary text representation, and transparent container expansion (PDF, PNG, JPEG-via-JXL, ZIP, tar, gzip, BMP, TGA, TIFF, GIF, WAV/AIFF→FLAC, FITS, DICOM, NIfTI).
 
@@ -10,14 +10,34 @@ Sister project: [pmarreck/mini_blar](https://github.com/pmarreck/mini_blar) — 
 
 ## Build
 
-Requires [Nix](https://nixos.org/) with flakes enabled. All dependencies (Zig 0.15.2, libFLAC, libjxl, hyperfine) are provided hermetically.
+Requires [Nix](https://nixos.org/) with flakes enabled. The flake pins Zig 0.16.0
+and supplies the native dependencies; `build.zig.zon` pins the Zig libraries.
 
 ```bash
 ./test           # run tests
 ./build          # build (ReleaseFast)
-./build --debug  # build (Debug)
+nix develop -c ./build debug  # build (Debug)
 ./bm             # run benchmarks
 ```
+
+The legacy shell tests still use Python to generate fixtures. Until those
+generators are replaced, provide it temporarily with
+`nix shell --inputs-from . nixpkgs#python3 -c ./test`. The test runner enters
+the project Nix environment itself and reports missing fixture dependencies
+before running tests.
+
+The central goal is to unpack files' internal compression, encode the contents
+more efficiently in an archive, and reconstruct the original format on
+extraction. See [INTENT.md](INTENT.md) for scope, prior art, and the distinction
+between intended byte preservation and currently measured behavior.
+[TERMINOLOGY.md](TERMINOLOGY.md) defines the format vocabulary;
+[CODE_MINIMAP.md](CODE_MINIMAP.md) maps implementation files;
+[PLAN.md](PLAN.md) tracks outstanding work.
+
+Library consumers may pass `-Denable_image=false` to the Zig build to omit
+libjxl image transcoding. It defaults to true; zlib remains required for
+PNG/ZIP deflate emission. Nix CI targets are listed in
+[.mechatron-prime/targets](.mechatron-prime/targets).
 
 ## Usage
 
@@ -120,8 +140,8 @@ blar to-json a.blar \
 # Add / remove / rename / chmod via jq edits, all the usual moves.
 
 # Re-apply compression and/or encryption when materializing
-BLAR_PASSWORD=secret blar to-json encrypted.blar \
-  | BLAR_PASSWORD=secret blar from-json -z -e -o b.blar
+BLIP_PASSWORD=secret blar to-json encrypted.blar \
+  | BLIP_PASSWORD=secret blar from-json -z -e -o b.blar
 ```
 
 Binary content is encoded via printable-binary in JSON strings. All hashes, offsets, and index tables recompute on `from-json`. `to-json` decompresses and decrypts transparently — `from-json -z`/`-e` re-applies them.
@@ -138,7 +158,7 @@ blar create -e -o secret.blar myproject/                 # AES-256-GCM + Argon2i
 blar create -e chacha -o secret.blar myproject/          # ChaCha20-Poly1305
 blar create -e --kdf pbkdf2 -o secret.blar myproject/    # PBKDF2 instead
 blar create -z -e -o secret.blar myproject/              # compress + encrypt
-BLAR_PASSWORD=mysecret blar list secret.blar             # decrypt on read
+BLIP_PASSWORD=mysecret blar list secret.blar             # decrypt on read
 blar list secret.blar                                    # interactive prompt on stderr
 ```
 
@@ -185,13 +205,20 @@ ARRAY (archive)
 
 ## Transparent container expansion
 
-`blar` automatically detects and decomposes known file formats during archiving so LZMA2 can compress them effectively. Extraction reconstructs the original file byte-identically. This is transparent — you archive a PDF, you extract a PDF.
+`blar` detects and decomposes known file formats during archiving so their
+contents can be compressed more effectively. Extraction reconstructs the
+original file format. Exact original bytes are not guaranteed for formats
+using DEFLATE internally, including ZIP, Office documents, PNG, and some PDFs:
+recompressing the same decoded content can produce a different stream.
+For forensic preservation, disable container expansion and verify extracted
+files against the originals. Compression-time warnings remain planned work;
+see [INTENT.md](INTENT.md).
 
 | Format | What happens | Notes |
 |---|---|---|
-| **PDF** | JPEGs → JXL (lossless), zlib streams decompressed, structural shell preserved | byte-identical; up to 70% smaller on text-heavy PDFs |
+| **PDF** | JPEGs → JXL (lossless), zlib streams decompressed, structural shell preserved | exact bytes depend on the input; DEFLATE reconstruction can differ |
 | **PNG** | Raw pixels → lossless JXL; metadata chunks (tEXt/iCCP/pHYs) preserved | pixel-identical with metadata |
-| **ZIP** | Per-entry decompression; structure preserved | byte-identical |
+| **ZIP / Office documents** | Per-entry decompression; structure preserved | original DEFLATE bytes are not guaranteed |
 | **gzip** | Decompressed inside; recompressed on extract | content-identical (level/strategy not preserved) |
 | **tar** | Decomposed into constituent files; headers preserved as metadata | byte-identical; lets LZMA2 group across tar boundary |
 | **BMP/TGA/TIFF** | Raw pixels → JXL; compact header metadata | byte-identical; ~90–97% savings |

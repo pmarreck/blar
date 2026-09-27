@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 set -u
 
+if [[ -z ${IN_NIX_SHELL:-} ]]; then
+    exec nix develop -c bash "$0" "$@"
+fi
+
+# Legacy fixture generators still need Python; fail before missing fixtures
+# can turn empty-output comparisons into apparent passes.
+if ! command -v python3 >/dev/null 2>&1; then
+    printf '%s\n' 'Legacy test fixtures require Python. Run: nix shell --inputs-from . nixpkgs#python3 -c ./test' >&2
+    exit 1
+fi
+
 # =============================================================================
 # BLIP Master Test Runner
 # =============================================================================
@@ -22,15 +33,22 @@ run_suite() {
     local rc=$?
     # Extract pass/fail counts if present
     local pass fail
-    pass=$(echo "$output" | grep -o '[0-9]* passed' | head -1 | grep -o '[0-9]*' || echo "0")
-    fail=$(echo "$output" | grep -o '[0-9]* failed' | head -1 | grep -o '[0-9]*' || echo "0")
+    pass=$(printf '%s\n' "$output" | sed -nE \
+        -e 's/.* ([0-9]+) passed.*/\1/p' \
+        -e 's/.* ([0-9]+)\/[0-9]+ tests passed.*/\1/p' | head -1)
+    fail=$(printf '%s\n' "$output" | sed -nE 's/.* ([0-9]+) failed.*/\1/p' | head -1)
+    pass=${pass:-0}
+    fail=${fail:-0}
     if [[ $rc -ne 0 && "$fail" == "0" ]]; then
         fail=1
     fi
     TOTAL_PASS=$((TOTAL_PASS + pass))
     TOTAL_FAIL=$((TOTAL_FAIL + fail))
-    # Show last few lines of output
-    echo "$output" | tail -5
+    if (( rc != 0 )); then
+        printf '%s\n' "$output"
+    else
+        printf 'Results: %s passed, %s failed\n' "$pass" "$fail"
+    fi
 }
 
 echo "╔══════════════════════════════════════════════════════════════╗"
@@ -40,11 +58,17 @@ echo "╚═══════════════════════�
 # Build everything first (ReleaseFast for CLI tests)
 echo ""
 echo "Building (ReleaseFast)..."
-./build 2>&1 | tail -3 \
-    || { echo "FATAL: build failed"; exit 1; }
+build_output=$(./build 2>&1)
+build_rc=$?
+if (( build_rc != 0 )); then
+    printf '%s\nFATAL: build failed\n' "$build_output"
+    exit 1
+fi
+
+run_suite "Packaged CLI" "bash tests/cli/package_test"
 
 # Zig unit tests
-run_suite "Zig Unit Tests" "nix develop -c zig build test 2>&1"
+run_suite "Zig Unit Tests" "nix develop -c zig build test --summary all 2>&1"
 
 # CLI integration test suites
 run_suite "blar CLI Tests" "bash tests/blar_test.sh"

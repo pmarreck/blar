@@ -313,7 +313,7 @@ mkdir -p "$TMPDIR_TEST/t1/input"
 create_test_pdf "$TMPDIR_TEST/t1/input/photo.pdf" 1
 
 # Compute original checksum
-ORIG_SHA=$(shasum -a 256 "$TMPDIR_TEST/t1/input/photo.pdf" | awk '{print $1}')
+ORIG_SHA=$(sha256sum "$TMPDIR_TEST/t1/input/photo.pdf" | awk '{print $1}')
 
 (cd "$TMPDIR_TEST/t1/input" && "$BLAR" create -z -f -o "$TMPDIR_TEST/t1/archive.blar" photo.pdf 2>/dev/null)
 rc=$?
@@ -327,7 +327,7 @@ mkdir -p "$TMPDIR_TEST/t1/out"
 "$BLAR" extract "$TMPDIR_TEST/t1/archive.blar" -C "$TMPDIR_TEST/t1/out" 2>/dev/null
 
 if [[ -f "$TMPDIR_TEST/t1/out/photo.pdf" ]]; then
-  EXTRACTED_SHA=$(shasum -a 256 "$TMPDIR_TEST/t1/out/photo.pdf" | awk '{print $1}')
+  EXTRACTED_SHA=$(sha256sum "$TMPDIR_TEST/t1/out/photo.pdf" | awk '{print $1}')
   if [[ "$ORIG_SHA" == "$EXTRACTED_SHA" ]]; then
     pass "PDF container: roundtrip byte-identical (SHA256 match)"
   else
@@ -539,7 +539,7 @@ mkdir -p "$TMPDIR_TEST/t11/input"
 create_test_pdf "$TMPDIR_TEST/t11/input/solid.pdf" 1
 echo "also here" > "$TMPDIR_TEST/t11/input/note.txt"
 
-ORIG_SHA11=$(shasum -a 256 "$TMPDIR_TEST/t11/input/solid.pdf" | awk '{print $1}')
+ORIG_SHA11=$(sha256sum "$TMPDIR_TEST/t11/input/solid.pdf" | awk '{print $1}')
 
 (cd "$TMPDIR_TEST/t11" && "$BLAR" create -z --solid -f -o "$TMPDIR_TEST/t11/archive.blar" input 2>/dev/null)
 
@@ -547,7 +547,7 @@ mkdir -p "$TMPDIR_TEST/t11/out"
 "$BLAR" extract "$TMPDIR_TEST/t11/archive.blar" -C "$TMPDIR_TEST/t11/out" 2>/dev/null
 
 if [[ -f "$TMPDIR_TEST/t11/out/input/solid.pdf" ]]; then
-  EXTRACTED_SHA11=$(shasum -a 256 "$TMPDIR_TEST/t11/out/input/solid.pdf" | awk '{print $1}')
+  EXTRACTED_SHA11=$(sha256sum "$TMPDIR_TEST/t11/out/input/solid.pdf" | awk '{print $1}')
   if [[ "$ORIG_SHA11" == "$EXTRACTED_SHA11" ]]; then
     pass "solid mode: PDF roundtrip byte-identical"
   else
@@ -566,8 +566,8 @@ mkdir -p "$TMPDIR_TEST/t12/input"
 create_test_pdf "$TMPDIR_TEST/t12/input/a.pdf" 1
 create_test_pdf "$TMPDIR_TEST/t12/input/b.pdf" 2
 
-SHA_A=$(shasum -a 256 "$TMPDIR_TEST/t12/input/a.pdf" | awk '{print $1}')
-SHA_B=$(shasum -a 256 "$TMPDIR_TEST/t12/input/b.pdf" | awk '{print $1}')
+SHA_A=$(sha256sum "$TMPDIR_TEST/t12/input/a.pdf" | awk '{print $1}')
+SHA_B=$(sha256sum "$TMPDIR_TEST/t12/input/b.pdf" | awk '{print $1}')
 
 (cd "$TMPDIR_TEST/t12" && "$BLAR" create -z -f -o "$TMPDIR_TEST/t12/archive.blar" input 2>/dev/null)
 
@@ -582,8 +582,8 @@ fi
 mkdir -p "$TMPDIR_TEST/t12/out"
 "$BLAR" extract "$TMPDIR_TEST/t12/archive.blar" -C "$TMPDIR_TEST/t12/out" 2>/dev/null
 
-EXTRACTED_SHA_A=$(shasum -a 256 "$TMPDIR_TEST/t12/out/input/a.pdf" 2>/dev/null | awk '{print $1}')
-EXTRACTED_SHA_B=$(shasum -a 256 "$TMPDIR_TEST/t12/out/input/b.pdf" 2>/dev/null | awk '{print $1}')
+EXTRACTED_SHA_A=$(sha256sum "$TMPDIR_TEST/t12/out/input/a.pdf" 2>/dev/null | awk '{print $1}')
+EXTRACTED_SHA_B=$(sha256sum "$TMPDIR_TEST/t12/out/input/b.pdf" 2>/dev/null | awk '{print $1}')
 
 if [[ "$SHA_A" == "$EXTRACTED_SHA_A" ]] && [[ "$SHA_B" == "$EXTRACTED_SHA_B" ]]; then
   pass "multiple PDFs: both roundtrip byte-identical"

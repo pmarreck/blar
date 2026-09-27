@@ -1,0 +1,3 @@
+# Native Linux package and Zig regression tests; evaluated from flake.nix.
+packages.x86_64-linux.default
+checks.x86_64-linux.default

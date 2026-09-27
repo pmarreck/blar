@@ -103,8 +103,13 @@ cp "$ARCHIVE_ROUNDTRIP" "$CORRUPT"
 # Flip a byte near the middle of the archive
 FILE_SIZE=$(wc -c < "$CORRUPT" | tr -d ' ')
 OFFSET=$(( FILE_SIZE / 2 ))
-printf '\xff' | dd of="$CORRUPT" bs=1 seek="$OFFSET" count=1 conv=notrunc 2>/dev/null
-if "$BLAR" verify "$CORRUPT" >/dev/null 2>&1; then
+ORIGINAL_BYTE=$(od -An -tu1 -j "$OFFSET" -N 1 "$CORRUPT")
+printf -v CORRUPT_BYTE '%03o' "$((ORIGINAL_BYTE ^ 255))"
+printf '%b' "\\$CORRUPT_BYTE" | dd of="$CORRUPT" bs=1 seek="$OFFSET" count=1 conv=notrunc 2>/dev/null
+MUTATION_RC=$?
+if (( MUTATION_RC != 0 )) || cmp -s "$ARCHIVE_ROUNDTRIP" "$CORRUPT"; then
+  fail "corruption fixture could not be modified"
+elif "$BLAR" verify "$CORRUPT" >/dev/null 2>&1; then
   fail "verify corrupt archive exits non-zero (got exit 0)"
 else
   pass "verify corrupt archive exits non-zero"
@@ -359,9 +364,9 @@ printf "hello" > "$UDIR/hello_world.txt"
 if [[ -f "$TMPDIR_TEST/uni/archive.blar" ]]; then
   mkdir -p "$TMPDIR_TEST/uni/out"
   "$BLAR" extract "$TMPDIR_TEST/uni/archive.blar" -f -C "$TMPDIR_TEST/uni/out" 2>/dev/null
-  ORIG_MD5=$(md5 < "$UDIR/hello_world.txt")
-  EXT_MD5=$(md5 < "$TMPDIR_TEST/uni/out/input/hello_world.txt" 2>/dev/null)
-  if [[ "$ORIG_MD5" == "$EXT_MD5" ]]; then
+  ORIG_SHA=$(sha256sum < "$UDIR/hello_world.txt")
+  EXT_SHA=$(sha256sum < "$TMPDIR_TEST/uni/out/input/hello_world.txt" 2>/dev/null)
+  if [[ "$ORIG_SHA" == "$EXT_SHA" ]]; then
     pass "unicode: archive with UTF-8 filenames roundtripped"
   else
     fail "unicode: content differs"

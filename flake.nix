@@ -81,6 +81,15 @@
               -Djxl-lib-path=${pkgs.libjxl}/lib \
               -Dzlib-include-path=${pkgs.zlib.dev}/include \
               -Dzlib-lib-path=${pkgs.zlib}/lib
+            ${pkgs.lib.optionalString pkgs.stdenv.isLinux ''
+              ${pkgs.patchelf}/bin/patchelf \
+                --set-interpreter ${pkgs.stdenv.cc.bintools.dynamicLinker} \
+                "$out/bin/blar"
+            ''}
+          '';
+          doInstallCheck = true;
+          installCheckPhase = ''
+            bash tests/cli/package_test "$out"
           '';
         };
 

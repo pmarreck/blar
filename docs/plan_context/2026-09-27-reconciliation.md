@@ -96,3 +96,37 @@ local HEAD, with a clean working tree. Mechatron admitted that exact commit
 at 14:43 EDT and began its native package target. The existing webhook works;
 the hook-administration authentication issue did not block delivery. Consult
 `mechatron-ci log --project blar --commit eef68d5 --json` for its final result.
+
+## LuaJIT fixture port
+
+Peter chose to port the existing fixture generators immediately and explicitly
+specified LuaJIT. The shell suites now call shared generators in
+`tests/helpers/`; the JPEG payload and image/audio sample patterns are preserved.
+ZIP fixtures use a fixed DOS timestamp to make repeated generation deterministic.
+The NIfTI header writes its NUL terminator in Lua rather than embedding a literal
+NUL in a shell command.
+
+Fixture checks assert format fields and sizes, PDF cross-reference offsets, PNG
+filter decoding, and repeatable output. External `unzip` validates ZIP checksums
+and payloads; `pngcheck` validates each generated PNG type. The PNG comparison
+now rejects bad CRCs, malformed data, and incompatible image shapes, and decodes
+all five PNG filters before comparing pixels. The former helper only removed
+filter bytes. These checks do not establish forensic byte identity for blar's
+format reconstruction; that remains separate work in INTENT.md and PLAN.md.
+
+Benchmark BMP generation also uses LuaJIT. Its arithmetic uses LuaJIT and its
+timestamps use GNU coreutils from Nix. The optional audit reporter uses a LuaJIT
+CSV reader with quoted-field tests. No Python commands remain in the test,
+audit, or benchmark scripts. Original generator implementations remain in Git;
+this port was checked against format assertions and external tools without
+running the retired Python generators again.
+
+`./test` includes fixture and audit-helper checks. The sandboxed
+`checks.x86_64-linux.fixtures` target runs them independently of the Zig build
+and is listed in the Mechatron manifest.
+
+Validation completed on 2026-09-27: `./test` passed 681 checks with Python
+absent from PATH; the sandboxed fixture target passed all 97 helper checks.
+Flake output evaluation, shell syntax checks, plan lint, and directory-note
+validation also passed. Optional benchmark arithmetic was checked with fixed
+inputs; a new performance baseline and a full reconstruction audit were not run.

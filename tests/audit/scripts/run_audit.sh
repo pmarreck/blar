@@ -19,6 +19,9 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AUDIT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROJECT_DIR="$(cd "$AUDIT_DIR/../.." && pwd)"
+if [[ -z ${IN_NIX_SHELL:-} ]]; then
+    exec nix develop "$PROJECT_DIR" -c bash "$0" "$@"
+fi
 
 BLAR="${BLAR:-$PROJECT_DIR/zig-out/bin/blar}"
 DIFZ="${DIFZ:-difz}"  # may not be installed; we degrade gracefully
@@ -87,7 +90,7 @@ CSV="$AUDIT_DIR/results/audit-$TODAY.csv"
 MD="$AUDIT_DIR/results/audit-$TODAY.md"
 
 # Header row. Paths may contain commas / quotes; CSV writes quote the path
-# field so Python csv.DictReader parses correctly.
+# field so the LuaJIT CSV reader parses them correctly.
 echo "format,generator,path,size,archive_size,byte_identical,residual_bytes,residual_ratio,time_ms" > "$CSV"
 
 TMP_ROOT="$(mktemp -d)"
@@ -100,14 +103,14 @@ audit_one() {
     local file="$4"
     local rel_path="${file#"$AUDIT_DIR/corpus_$corpus/"}"
     local size; size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null)
-    local orig_sha; orig_sha=$(shasum -a 256 "$file" | awk '{print $1}')
+    local orig_sha; orig_sha=$(sha256sum "$file" | awk '{print $1}')
 
     local workdir; workdir=$(mktemp -d "$TMP_ROOT/audit.XXXXXX")
     local archive="$workdir/test.blar"
     local outdir="$workdir/out"
     mkdir -p "$outdir"
 
-    local t0; t0=$(python3 -c 'import time; print(int(time.time()*1000))')
+    local t0; t0=$(date +%s%3N)
     # Quote rel_path in CSV — book titles etc. may contain commas / quotes.
     local quoted_path; quoted_path=$(printf '"%s"' "${rel_path//\"/\"\"}")
     if ! "$BLAR" create -z -o "$archive" "$file" >/dev/null 2>&1; then
@@ -120,11 +123,11 @@ audit_one() {
         rm -rf "$workdir"
         return
     fi
-    local t1; t1=$(python3 -c 'import time; print(int(time.time()*1000))')
+    local t1; t1=$(date +%s%3N)
 
     local extracted; extracted=$(find "$outdir" -type f | head -1)
     local archive_size; archive_size=$(stat -f%z "$archive" 2>/dev/null || stat -c%s "$archive" 2>/dev/null)
-    local extr_sha; extr_sha=$(shasum -a 256 "$extracted" | awk '{print $1}')
+    local extr_sha; extr_sha=$(sha256sum "$extracted" | awk '{print $1}')
 
     local byte_identical
     local residual_bytes=""
@@ -170,75 +173,7 @@ for corpus in "${CORPORA[@]}"; do
 done
 
 # Aggregate into markdown report
-python3 - "$CSV" "$MD" <<'PYEOF'
-import csv, sys
-from collections import defaultdict
-
-csv_path = sys.argv[1]
-md_path = sys.argv[2]
-
-records = []
-with open(csv_path) as f:
-    reader = csv.DictReader(f)
-    for row in reader:
-        records.append(row)
-
-# Per (format, generator) stats
-by_pair = defaultdict(list)
-for r in records:
-    by_pair[(r['format'], r['generator'])].append(r)
-
-with open(md_path, 'w') as f:
-    f.write(f"# blar byte-identity audit — {csv_path.split('/')[-1].replace('audit-','').replace('.csv','')}\n\n")
-    f.write(f"Total files audited: **{len(records)}**\n\n")
-
-    # Overall summary
-    by_id = [r for r in records if r['byte_identical'] == 'true']
-    f.write(f"- Byte-identical: **{len(by_id)} / {len(records)} ({100*len(by_id)/max(1,len(records)):.1f}%)**\n")
-    diverged = [r for r in records if r['byte_identical'] == 'false']
-    failed = [r for r in records if r['byte_identical'].startswith('FAIL')]
-    f.write(f"- Diverged (content-only): {len(diverged)}\n")
-    f.write(f"- Failed (create/extract error): {len(failed)}\n\n")
-
-    f.write("## Per-format breakdown\n\n")
-    f.write("| Format | Generator | N | Byte-identical | Median residual | Median ratio | Notes |\n")
-    f.write("|---|---|---|---|---|---|---|\n")
-
-    def _safe_int(s):
-        try: return int(s) if s and s.lstrip('-').isdigit() else None
-        except Exception: return None
-    def _safe_float(s):
-        try: return float(s) if s else None
-        except Exception: return None
-
-    for (fmt, gen), rs in sorted(by_pair.items()):
-        n = len(rs)
-        bi = sum(1 for r in rs if r.get('byte_identical') == 'true')
-        residuals = [v for r in rs if (v := _safe_int(r.get('residual_bytes',''))) is not None]
-        ratios = [v for r in rs if (v := _safe_float(r.get('residual_ratio',''))) is not None]
-        med_res = ''
-        med_ratio = ''
-        if residuals:
-            residuals.sort(); med_res = str(residuals[len(residuals)//2])
-        if ratios:
-            ratios.sort(); med_ratio = f"{ratios[len(ratios)//2]:.4f}"
-        note = ''
-        if med_ratio:
-            mr = float(med_ratio)
-            if mr < 0.01:  note = 'difz backstop: tiny patch — viable'
-            elif mr < 0.5: note = 'difz backstop: feasible'
-            else:          note = 'difz backstop: patch too large; raw-store wins'
-        f.write(f"| {fmt} | {gen} | {n} | {bi}/{n} ({100*bi/max(1,n):.0f}%) | {med_res} | {med_ratio} | {note} |\n")
-
-    f.write("\n## Failures\n\n")
-    if failed:
-        for r in failed[:50]:
-            f.write(f"- `{r['format']}/{r['generator']}/{r['path']}` — {r['byte_identical']}\n")
-        if len(failed) > 50:
-            f.write(f"- ... and {len(failed) - 50} more\n")
-    else:
-        f.write("(none)\n")
-PYEOF
+"$PROJECT_DIR/tests/helpers/audit-report" "$CSV" "$MD" || exit 1
 
 echo
 echo "=== Audit complete ==="

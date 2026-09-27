@@ -15,6 +15,9 @@ set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+if [[ -z ${IN_NIX_SHELL:-} ]]; then
+    exec nix develop "$PROJECT_DIR" -c bash "$0" "$@"
+fi
 BLAR="$PROJECT_DIR/zig-out/bin/blar"
 RESULTS_FILE="$PROJECT_DIR/bench/archive_bench_results.jsonl"
 TIMESTAMP=$(date +%s)
@@ -39,23 +42,7 @@ trap 'rm -rf "$TMPDIR_BENCH"' EXIT
 
 generate_bmp() {
     local path="$1" width="$2" height="$3"
-    python3 -c "
-import struct, sys
-w, h = int(sys.argv[2]), int(sys.argv[3])
-rs = (w * 3 + 3) & ~3
-pd = rs * h
-fs = 54 + pd
-header = struct.pack('<2sIHHI', b'BM', fs, 0, 0, 54)
-dib = struct.pack('<IiiHHIIiiII', 40, w, h, 1, 24, 0, pd, 2835, 2835, 0, 0)
-with open(sys.argv[1], 'wb') as f:
-    f.write(header + dib)
-    for y in range(h):
-        row = b''
-        for x in range(w):
-            row += struct.pack('BBB', (x*4)&0xFF, (y*4)&0xFF, ((x+y)*2)&0xFF)
-        while len(row) % 4 != 0: row += b'\x00'
-        f.write(row)
-" "$path" "$width" "$height"
+    "$PROJECT_DIR/tests/helpers/fixtures" bmp "$path" "$width" gradient "$height" || exit 1
 }
 
 generate_text_file() {
@@ -72,16 +59,9 @@ log_result() {
 # Time a command, return nanoseconds
 time_ns() {
     local start end
-    if command -v gdate &>/dev/null; then
-        start=$(gdate +%s%N)
-        eval "$@"
-        end=$(gdate +%s%N)
-    else
-        # macOS fallback: millisecond resolution via python
-        start=$(python3 -c "import time; print(int(time.time_ns()))")
-        eval "$@"
-        end=$(python3 -c "import time; print(int(time.time_ns()))")
-    fi
+    start=$(date +%s%N)
+    eval "$@"
+    end=$(date +%s%N)
     echo $((end - start))
 }
 
@@ -98,12 +78,12 @@ TOTAL_KB=100
 
 # In-memory
 NS=$(time_ns "(cd $TMPDIR_BENCH/b1 && $BLAR create -z -f -o out_inmem.blar input 2>/dev/null)")
-THROUGHPUT=$(python3 -c "print(round($TOTAL_KB / 1024.0 / ($NS / 1e9), 1))")
+THROUGHPUT=$(luajit -e 'io.write(string.format("%.1f", tonumber(arg[1]) / 1024 / (tonumber(arg[2]) / 1e9)))' - "$TOTAL_KB" "$NS" < /dev/null)
 log_result "small_10files_inmem" "$NS" "$THROUGHPUT"
 
 # Streaming
 NS=$(time_ns "(cd $TMPDIR_BENCH/b1 && $BLAR create -z -f --streaming -o out_stream.blar input 2>/dev/null)")
-THROUGHPUT=$(python3 -c "print(round($TOTAL_KB / 1024.0 / ($NS / 1e9), 1))")
+THROUGHPUT=$(luajit -e 'io.write(string.format("%.1f", tonumber(arg[1]) / 1024 / (tonumber(arg[2]) / 1e9)))' - "$TOTAL_KB" "$NS" < /dev/null)
 log_result "small_10files_streaming" "$NS" "$THROUGHPUT"
 
 # =============================================================================
@@ -119,17 +99,17 @@ TOTAL_KB=$((100 * 100 * 3 * 10 / 1024))
 
 # In-memory with expansion
 NS=$(time_ns "(cd $TMPDIR_BENCH/b2 && $BLAR create -z -f -o out_inmem.blar input 2>/dev/null)")
-THROUGHPUT=$(python3 -c "print(round($TOTAL_KB / 1024.0 / ($NS / 1e9), 1))")
+THROUGHPUT=$(luajit -e 'io.write(string.format("%.1f", tonumber(arg[1]) / 1024 / (tonumber(arg[2]) / 1e9)))' - "$TOTAL_KB" "$NS" < /dev/null)
 log_result "medium_10bmp_inmem_expand" "$NS" "$THROUGHPUT"
 
 # Streaming with expansion
 NS=$(time_ns "(cd $TMPDIR_BENCH/b2 && $BLAR create -z -f --streaming -o out_stream.blar input 2>/dev/null)")
-THROUGHPUT=$(python3 -c "print(round($TOTAL_KB / 1024.0 / ($NS / 1e9), 1))")
+THROUGHPUT=$(luajit -e 'io.write(string.format("%.1f", tonumber(arg[1]) / 1024 / (tonumber(arg[2]) / 1e9)))' - "$TOTAL_KB" "$NS" < /dev/null)
 log_result "medium_10bmp_streaming_expand" "$NS" "$THROUGHPUT"
 
 # In-memory without expansion
 NS=$(time_ns "(cd $TMPDIR_BENCH/b2 && $BLAR create -z -f --no-expand-containers -o out_noexpand.blar input 2>/dev/null)")
-THROUGHPUT=$(python3 -c "print(round($TOTAL_KB / 1024.0 / ($NS / 1e9), 1))")
+THROUGHPUT=$(luajit -e 'io.write(string.format("%.1f", tonumber(arg[1]) / 1024 / (tonumber(arg[2]) / 1e9)))' - "$TOTAL_KB" "$NS" < /dev/null)
 log_result "medium_10bmp_inmem_noexpand" "$NS" "$THROUGHPUT"
 
 # =============================================================================
@@ -145,12 +125,12 @@ TOTAL_KB=10000
 
 # In-memory
 NS=$(time_ns "(cd $TMPDIR_BENCH/b3 && $BLAR create -z -f -o out_inmem.blar input 2>/dev/null)")
-THROUGHPUT=$(python3 -c "print(round($TOTAL_KB / 1024.0 / ($NS / 1e9), 1))")
+THROUGHPUT=$(luajit -e 'io.write(string.format("%.1f", tonumber(arg[1]) / 1024 / (tonumber(arg[2]) / 1e9)))' - "$TOTAL_KB" "$NS" < /dev/null)
 log_result "large_100files_inmem" "$NS" "$THROUGHPUT"
 
 # Streaming
 NS=$(time_ns "(cd $TMPDIR_BENCH/b3 && $BLAR create -z -f --streaming -o out_stream.blar input 2>/dev/null)")
-THROUGHPUT=$(python3 -c "print(round($TOTAL_KB / 1024.0 / ($NS / 1e9), 1))")
+THROUGHPUT=$(luajit -e 'io.write(string.format("%.1f", tonumber(arg[1]) / 1024 / (tonumber(arg[2]) / 1e9)))' - "$TOTAL_KB" "$NS" < /dev/null)
 log_result "large_100files_streaming" "$NS" "$THROUGHPUT"
 
 # =============================================================================

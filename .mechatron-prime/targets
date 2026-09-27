@@ -1,3 +1,4 @@
-# Native Linux package and Zig regression tests; evaluated from flake.nix.
+# Native Linux package, Zig regressions, and LuaJIT fixture checks.
 packages.x86_64-linux.default
 checks.x86_64-linux.default
+checks.x86_64-linux.fixtures

@@ -336,7 +336,7 @@ fi
 
 # --------------- 22. Info --json produces valid JSON ---------------
 JSON_OUT="$("$BLAR" info --json "$ARCHIVE_DIR" 2>/dev/null)"
-if echo "$JSON_OUT" | python3 -m json.tool >/dev/null 2>&1; then
+if echo "$JSON_OUT" | jq -e -s 'length == 1' >/dev/null 2>&1; then
   pass "info --json produces valid JSON"
 else
   fail "info --json produces valid JSON"

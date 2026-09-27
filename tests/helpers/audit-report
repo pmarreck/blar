@@ -1,0 +1,8 @@
+#!/usr/bin/env luajit
+package.path = arg[0]:match('^(.*)/') .. '/?.lua;' .. package.path
+local report = require('audit_report')
+local input = assert(io.open(assert(arg[1]),'rb'))
+local csv = assert(input:read('*a')); assert(input:close())
+local title = arg[1]:match('([^/]+)$'):gsub('^audit%-',''):gsub('%.csv$','')
+local output = assert(io.open(assert(arg[2]),'wb'))
+assert(output:write(report.render(report.parse(csv),title))); assert(output:close())

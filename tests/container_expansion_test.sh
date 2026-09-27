@@ -41,28 +41,8 @@ fail() {
 }
 
 # --------------- helper: create a test zip ---------------
-create_test_zip() {
-  local zip_path="$1"
-  shift
-  python3 -c "
-import zipfile, sys
-zf = zipfile.ZipFile(sys.argv[1], 'w', zipfile.ZIP_DEFLATED)
-args = sys.argv[2:]
-i = 0
-while i < len(args):
-    path = args[i]
-    content = args[i+1] if i+1 < len(args) else ''
-    if path.endswith('/'):
-        import zipfile as z
-        zi = z.ZipInfo(path)
-        zi.external_attr = 0o755 << 16 | 0x10
-        zf.writestr(zi, '')
-    else:
-        zf.writestr(path, content)
-    i += 2
-zf.close()
-" "$zip_path" "$@"
-}
+fixture() { "$SCRIPT_DIR/helpers/fixtures" "$@" || exit 1; }
+create_test_zip() { fixture zip "$@"; }
 
 # =============================================================================
 # Test 1: Basic container expansion roundtrip
@@ -85,17 +65,7 @@ mkdir -p "$TMPDIR_TEST/t1/out"
 "$BLAR" extract "$TMPDIR_TEST/t1/archive.blar" -C "$TMPDIR_TEST/t1/out" 2>/dev/null
 
 if [[ -f "$TMPDIR_TEST/t1/out/document.docx" ]]; then
-  python3 -c "
-import zipfile, sys
-zf = zipfile.ZipFile(sys.argv[1], 'r')
-names = zf.namelist()
-zf.close()
-if '[Content_Types].xml' in names and 'word/document.xml' in names:
-    sys.exit(0)
-else:
-    print('Missing entries:', names, file=sys.stderr)
-    sys.exit(1)
-" "$TMPDIR_TEST/t1/out/document.docx"
+  (test "$(unzip -Z1 "$TMPDIR_TEST/t1/out/document.docx")" = $'[Content_Types].xml\nword/document.xml')
   if [[ $? -eq 0 ]]; then
     pass "container expansion: roundtrip content preserved"
   else
@@ -106,18 +76,8 @@ else
 fi
 
 # Verify extracted zip content matches original
-ORIG_CONTENT=$(python3 -c "
-import zipfile, sys
-zf = zipfile.ZipFile(sys.argv[1], 'r')
-print(zf.read('word/document.xml').decode(), end='')
-zf.close()
-" "$TMPDIR_TEST/t1/input/document.docx")
-EXTRACTED_CONTENT=$(python3 -c "
-import zipfile, sys
-zf = zipfile.ZipFile(sys.argv[1], 'r')
-print(zf.read('word/document.xml').decode(), end='')
-zf.close()
-" "$TMPDIR_TEST/t1/out/document.docx" 2>/dev/null)
+ORIG_CONTENT=$(unzip -p "$TMPDIR_TEST/t1/input/document.docx" "word/document.xml")
+EXTRACTED_CONTENT=$(unzip -p "$TMPDIR_TEST/t1/out/document.docx" "word/document.xml" 2>/dev/null)
 if [[ "$ORIG_CONTENT" == "$EXTRACTED_CONTENT" ]]; then
   pass "container expansion: inner file content matches"
 else
@@ -207,12 +167,7 @@ fi
 # Roundtrip
 mkdir -p "$TMPDIR_TEST/t6/out"
 "$BLAR" extract "$TMPDIR_TEST/t6/archive.blar" -C "$TMPDIR_TEST/t6/out" 2>/dev/null
-INNER=$(python3 -c "
-import zipfile, sys
-zf = zipfile.ZipFile(sys.argv[1], 'r')
-print(zf.read('inner.txt').decode(), end='')
-zf.close()
-" "$TMPDIR_TEST/t6/out/data.zip" 2>/dev/null)
+INNER=$(unzip -p "$TMPDIR_TEST/t6/out/data.zip" "inner.txt" 2>/dev/null)
 if [[ "$INNER" == "expanded content" ]]; then
   pass "--expand-all-zips: roundtrip preserves content"
 else
@@ -253,12 +208,7 @@ create_test_zip "$TMPDIR_TEST/t8/input/nested.docx" \
 mkdir -p "$TMPDIR_TEST/t8/out"
 "$BLAR" extract "$TMPDIR_TEST/t8/archive.blar" -C "$TMPDIR_TEST/t8/out" 2>/dev/null
 
-DEEP=$(python3 -c "
-import zipfile, sys
-zf = zipfile.ZipFile(sys.argv[1], 'r')
-print(zf.read('sub/deep.xml').decode(), end='')
-zf.close()
-" "$TMPDIR_TEST/t8/out/nested.docx" 2>/dev/null)
+DEEP=$(unzip -p "$TMPDIR_TEST/t8/out/nested.docx" "sub/deep.xml" 2>/dev/null)
 if [[ "$DEEP" == "<deep/>" ]]; then
   pass "nested dirs in container: content preserved"
 else
@@ -269,11 +219,7 @@ fi
 # Test 9: Empty zip roundtrip
 # =============================================================================
 mkdir -p "$TMPDIR_TEST/t9/input"
-python3 -c "
-import zipfile, sys
-zf = zipfile.ZipFile(sys.argv[1], 'w')
-zf.close()
-" "$TMPDIR_TEST/t9/input/empty.docx"
+fixture zip "$TMPDIR_TEST/t9/input/empty.docx"
 
 (cd "$TMPDIR_TEST/t9/input" && "$BLAR" create -z -f -o "$TMPDIR_TEST/t9/archive.blar" empty.docx 2>/dev/null)
 
@@ -310,12 +256,7 @@ else
 fi
 
 # Check container
-REPORT=$(python3 -c "
-import zipfile, sys
-zf = zipfile.ZipFile(sys.argv[1], 'r')
-print(zf.read('document.xml').decode(), end='')
-zf.close()
-" "$TMPDIR_TEST/t10/out/input/subdir/report.docx" 2>/dev/null)
+REPORT=$(unzip -p "$TMPDIR_TEST/t10/out/input/subdir/report.docx" "document.xml" 2>/dev/null)
 if [[ "$REPORT" == "<report>Q4 Results</report>" ]]; then
   pass "mixed content: container roundtrip preserved"
 else
@@ -352,12 +293,7 @@ echo "also here" > "$TMPDIR_TEST/t12/input/note.txt"
 mkdir -p "$TMPDIR_TEST/t12/out"
 "$BLAR" extract "$TMPDIR_TEST/t12/archive.blar" -C "$TMPDIR_TEST/t12/out" 2>/dev/null
 
-SOLID_CONTENT=$(python3 -c "
-import zipfile, sys
-zf = zipfile.ZipFile(sys.argv[1], 'r')
-print(zf.read('content.xml').decode(), end='')
-zf.close()
-" "$TMPDIR_TEST/t12/out/input/file.docx" 2>/dev/null)
+SOLID_CONTENT=$(unzip -p "$TMPDIR_TEST/t12/out/input/file.docx" "content.xml" 2>/dev/null)
 if [[ "$SOLID_CONTENT" == "<solid>test</solid>" ]]; then
   pass "solid mode: container roundtrip works"
 else
@@ -394,7 +330,7 @@ fi
 # Test 14: Gzip content preservation with different levels
 # =============================================================================
 mkdir -p "$TMPDIR_TEST/t14/input"
-python3 -c "import sys; sys.stdout.buffer.write(b'ABCDEFGHIJ' * 10000)" | gzip -2 > "$TMPDIR_TEST/t14/input/fast.gz"
+"$SCRIPT_DIR/helpers/fixtures" repeat - ABCDEFGHIJ 10000 | gzip -2 > "$TMPDIR_TEST/t14/input/fast.gz"
 
 (cd "$TMPDIR_TEST/t14" && "$BLAR" create -z -f -o "$TMPDIR_TEST/t14/archive.blar" input 2>/dev/null)
 mkdir -p "$TMPDIR_TEST/t14/out"
@@ -416,31 +352,7 @@ fi
 echo "--- Test 15: BMP container expansion ---"
 
 # Create a 24-bit uncompressed BMP programmatically
-python3 -c "
-import struct, sys
-
-width, height = 32, 32
-row_stride = (width * 3 + 3) & ~3
-pixel_data_len = row_stride * height
-file_size = 54 + pixel_data_len
-
-# BMP file header (14 bytes)
-header = struct.pack('<2sIHHI', b'BM', file_size, 0, 0, 54)
-# DIB header (40 bytes) - BITMAPINFOHEADER
-dib = struct.pack('<IiiHHIIiiII', 40, width, height, 1, 24, 0, pixel_data_len, 2835, 2835, 0, 0)
-
-with open(sys.argv[1], 'wb') as f:
-    f.write(header)
-    f.write(dib)
-    for y in range(height):
-        row = b''
-        for x in range(width):
-            row += struct.pack('BBB', (x * 17) & 0xFF, (y * 23) & 0xFF, ((x + y) * 13) & 0xFF)
-        # Pad to 4-byte boundary
-        while len(row) % 4 != 0:
-            row += b'\x00'
-        f.write(row)
-" "$TMPDIR_TEST/t15_input.bmp"
+fixture bmp "$TMPDIR_TEST/t15_input.bmp" 32 pattern
 
 mkdir -p "$TMPDIR_TEST/t15/input"
 cp "$TMPDIR_TEST/t15_input.bmp" "$TMPDIR_TEST/t15/input/test.bmp"
@@ -474,29 +386,7 @@ fi
 echo "--- Test 16: BMP container size savings ---"
 
 # Create a larger BMP (64x64 = significant raw data)
-python3 -c "
-import struct, sys
-
-width, height = 64, 64
-row_stride = (width * 3 + 3) & ~3
-pixel_data_len = row_stride * height
-file_size = 54 + pixel_data_len
-
-header = struct.pack('<2sIHHI', b'BM', file_size, 0, 0, 54)
-dib = struct.pack('<IiiHHIIiiII', 40, width, height, 1, 24, 0, pixel_data_len, 2835, 2835, 0, 0)
-
-with open(sys.argv[1], 'wb') as f:
-    f.write(header)
-    f.write(dib)
-    for y in range(height):
-        row = b''
-        for x in range(width):
-            # gradient pattern
-            row += struct.pack('BBB', x * 4 & 0xFF, y * 4 & 0xFF, (x + y) * 2 & 0xFF)
-        while len(row) % 4 != 0:
-            row += b'\x00'
-        f.write(row)
-" "$TMPDIR_TEST/t16_input.bmp"
+fixture bmp "$TMPDIR_TEST/t16_input.bmp" 64 gradient
 
 mkdir -p "$TMPDIR_TEST/t16/input"
 cp "$TMPDIR_TEST/t16_input.bmp" "$TMPDIR_TEST/t16/input/gradient.bmp"
@@ -572,33 +462,7 @@ fi
 echo "--- Test 18: TIFF container expansion ---"
 
 # Create uncompressed TIFF programmatically
-python3 -c "
-import struct, sys
-width, height = 64, 64
-spp = 3
-pixel_data = bytearray()
-for y in range(height):
-    for x in range(width):
-        pixel_data.append((x * 4) & 0xFF)
-        pixel_data.append((y * 4) & 0xFF)
-        pixel_data.append(((x+y) * 2) & 0xFF)
-pixel_data_len = len(pixel_data)
-ifd_entries = 11
-ifd_size = 2 + ifd_entries * 12 + 4
-pixel_offset = 8 + ifd_size
-with open(sys.argv[1], 'wb') as f:
-    f.write(b'II')
-    f.write(struct.pack('<H', 42))
-    f.write(struct.pack('<I', 8))
-    f.write(struct.pack('<H', ifd_entries))
-    def we(t, ty, c, v): f.write(struct.pack('<HHII', t, ty, c, v))
-    we(256, 4, 1, width); we(257, 4, 1, height); we(258, 3, 1, 8)
-    we(259, 3, 1, 1); we(262, 3, 1, 2); we(273, 4, 1, pixel_offset)
-    we(277, 3, 1, spp); we(278, 4, 1, height); we(279, 4, 1, pixel_data_len)
-    we(284, 3, 1, 1); we(296, 3, 1, 2)
-    f.write(struct.pack('<I', 0))
-    f.write(pixel_data)
-" "$TMPDIR_TEST/t18_input.tiff"
+fixture tiff "$TMPDIR_TEST/t18_input.tiff"
 
 mkdir -p "$TMPDIR_TEST/t18/input"
 cp "$TMPDIR_TEST/t18_input.tiff" "$TMPDIR_TEST/t18/input/test.tiff"
@@ -642,22 +506,7 @@ fi
 # =============================================================================
 echo "--- Test 19: GIF roundtrip integrity ---"
 
-python3 -c "
-import struct, sys
-# Minimal 1x1 red pixel GIF89a
-with open(sys.argv[1], 'wb') as f:
-    f.write(b'GIF89a')
-    f.write(struct.pack('<HH', 1, 1))  # 1x1
-    f.write(bytes([0x80, 0, 0]))  # GCT flag, 2 colors
-    f.write(bytes([255, 0, 0, 0, 0, 0]))  # GCT: red, black
-    f.write(b'\x2c')  # image separator
-    f.write(struct.pack('<HHHH', 0, 0, 1, 1))  # 1x1
-    f.write(bytes([0]))  # no LCT
-    f.write(bytes([2]))  # LZW min code size
-    f.write(bytes([2, 0x44, 0x01]))  # 2 bytes of LZW data
-    f.write(bytes([0]))  # block terminator
-    f.write(b'\x3b')  # trailer
-" "$TMPDIR_TEST/t19_input.gif"
+fixture gif "$TMPDIR_TEST/t19_input.gif"
 
 mkdir -p "$TMPDIR_TEST/t19/input"
 cp "$TMPDIR_TEST/t19_input.gif" "$TMPDIR_TEST/t19/input/test.gif"
@@ -682,19 +531,7 @@ fi
 echo "--- Test 20: TGA container expansion ---"
 
 # Create a 64x64 24-bit uncompressed TGA
-python3 -c "
-import struct, sys
-width, height = 64, 64
-with open(sys.argv[1], 'wb') as f:
-    f.write(bytes([0, 0, 2]))  # id_length=0, color_map=0, type=2
-    f.write(bytes([0]*5))  # color map spec
-    f.write(struct.pack('<HH', 0, 0))  # x/y origin
-    f.write(struct.pack('<HH', width, height))
-    f.write(bytes([24, 0]))  # bpp=24, descriptor=0 (bottom-up)
-    for y in range(height):
-        for x in range(width):
-            f.write(bytes([(x*4)&0xFF, (y*4)&0xFF, ((x+y)*2)&0xFF]))  # BGR
-" "$TMPDIR_TEST/t20_input.tga"
+fixture tga "$TMPDIR_TEST/t20_input.tga"
 
 mkdir -p "$TMPDIR_TEST/t20/input"
 cp "$TMPDIR_TEST/t20_input.tga" "$TMPDIR_TEST/t20/input/test.tga"
@@ -741,20 +578,7 @@ fi
 # =============================================================================
 echo "--- Test 21: WAV container expansion ---"
 
-python3 -c "
-import struct, sys, math
-sr = 44100; ch = 2; bps = 16; dur = 0.5
-n = int(sr * dur)
-with open(sys.argv[1], 'wb') as f:
-    data_size = n * ch * (bps // 8)
-    f.write(b'RIFF'); f.write(struct.pack('<I', 36 + data_size))
-    f.write(b'WAVE'); f.write(b'fmt ')
-    f.write(struct.pack('<IHHIIHH', 16, 1, ch, sr, sr*ch*(bps//8), ch*(bps//8), bps))
-    f.write(b'data'); f.write(struct.pack('<I', data_size))
-    for s in range(n):
-        for c in range(ch):
-            f.write(struct.pack('<h', int(16384 * math.sin(2*math.pi*(440+c*220)*s/sr))))
-" "$TMPDIR_TEST/t21_input.wav"
+fixture wav "$TMPDIR_TEST/t21_input.wav"
 
 mkdir -p "$TMPDIR_TEST/t21/input"
 cp "$TMPDIR_TEST/t21_input.wav" "$TMPDIR_TEST/t21/input/test.wav"
@@ -803,26 +627,7 @@ fi
 # =============================================================================
 echo "--- Test 22: AIFF container expansion ---"
 
-python3 -c "
-import struct, sys, math
-def encode_ext80(rate):
-    if rate == 0: return b'\x00' * 10
-    exp = 16383 + 31; r = rate
-    while r and not (r & 0x80000000): r <<= 1; exp -= 1
-    return struct.pack('>HI', exp, r) + b'\x00' * 4
-sr = 44100; ch = 2; bps = 16; frames = 22050
-pcm_size = frames * ch * (bps//8); ssnd_size = 8 + pcm_size
-comm_size = 18; form_size = 4 + 8 + comm_size + 8 + ssnd_size
-with open(sys.argv[1], 'wb') as f:
-    f.write(b'FORM'); f.write(struct.pack('>I', form_size)); f.write(b'AIFF')
-    f.write(b'COMM'); f.write(struct.pack('>I', comm_size))
-    f.write(struct.pack('>HIH', ch, frames, bps)); f.write(encode_ext80(sr))
-    f.write(b'SSND'); f.write(struct.pack('>I', ssnd_size))
-    f.write(struct.pack('>II', 0, 0))
-    for s in range(frames):
-        for c in range(ch):
-            f.write(struct.pack('>h', int(16384 * math.sin(2*3.14159265*(440+c*220)*s/sr))))
-" "$TMPDIR_TEST/t22_input.aiff"
+fixture aiff "$TMPDIR_TEST/t22_input.aiff"
 
 mkdir -p "$TMPDIR_TEST/t22/input"
 cp "$TMPDIR_TEST/t22_input.aiff" "$TMPDIR_TEST/t22/input/test.aiff"
@@ -855,29 +660,7 @@ fi
 # =============================================================================
 echo "--- Test 23: FITS container expansion ---"
 
-python3 -c "
-import sys
-width, height = 64, 64
-pixel_size = width * height
-header_size = 2880
-total = header_size + ((pixel_size + 2879) // 2880) * 2880
-buf = bytearray(b' ' * total)
-off = 0
-def wc(key, val):
-    global off
-    card = list(b' ' * 80)
-    for i, c in enumerate(key): card[i] = ord(c)
-    card[8] = ord('='); card[9] = ord(' ')
-    v = str(val); start = 30 - len(v)
-    for i, c in enumerate(v): card[start+i] = ord(c)
-    buf[off:off+80] = bytes(card); off += 80
-wc('SIMPLE','T'); wc('BITPIX',8); wc('NAXIS',2); wc('NAXIS1',width); wc('NAXIS2',height)
-end_card = bytearray(b' '*80); end_card[0:3] = b'END'; buf[off:off+80] = end_card
-for y in range(height):
-    for x in range(width):
-        buf[header_size + y*width + x] = (x*17 + y*23) & 0xFF
-with open(sys.argv[1], 'wb') as f: f.write(buf)
-" "$TMPDIR_TEST/t23_input.fits"
+fixture fits "$TMPDIR_TEST/t23_input.fits"
 
 mkdir -p "$TMPDIR_TEST/t23/input"
 cp "$TMPDIR_TEST/t23_input.fits" "$TMPDIR_TEST/t23/input/test.fits"
@@ -918,16 +701,7 @@ fi
 # =============================================================================
 echo "--- Test 24: NIfTI container expansion ---"
 
-python3 -c "
-import struct, sys
-w,h,s=32,32,4; buf=bytearray(352+w*h*s)
-struct.pack_into('<I',buf,0,348)
-struct.pack_into('<H',buf,40,3); struct.pack_into('<H',buf,42,w); struct.pack_into('<H',buf,44,h); struct.pack_into('<H',buf,46,s)
-struct.pack_into('<H',buf,70,2); struct.pack_into('<H',buf,72,8); struct.pack_into('<f',buf,108,352.0)
-buf[344:348]=b'n+1 '
-for i in range(w*h*s): buf[352+i]=(i*17)&0xFF
-with open(sys.argv[1],'wb') as f: f.write(buf)
-" "$TMPDIR_TEST/t24_input.nii"
+fixture nifti "$TMPDIR_TEST/t24_input.nii"
 
 mkdir -p "$TMPDIR_TEST/t24/input"
 cp "$TMPDIR_TEST/t24_input.nii" "$TMPDIR_TEST/t24/input/brain.nii"
@@ -970,34 +744,7 @@ fi
 # =============================================================================
 echo "--- Test 25: DICOM container expansion ---"
 
-python3 -c "
-import struct, sys
-def wu16(f, v): f.write(struct.pack('<H', v))
-def wu32(f, v): f.write(struct.pack('<I', v))
-def wtag(f, g, e, vr, val):
-    wu16(f, g); wu16(f, e)
-    f.write(vr.encode()); wu16(f, len(val)); f.write(val)
-def wtagu16(f, g, e, vr, val):
-    wu16(f, g); wu16(f, e)
-    f.write(vr.encode()); wu16(f, 2); wu16(f, val)
-
-width, height = 64, 64
-bitsAlloc = 16
-pixel_size = width * height * (bitsAlloc // 8)
-with open(sys.argv[1], 'wb') as f:
-    f.write(b'\x00' * 128 + b'DICM')
-    wtag(f, 0x0002, 0x0010, 'UI', b'1.2.840.10008.1.2.1\x00')
-    wtagu16(f, 0x0028, 0x0002, 'US', 1)
-    wtagu16(f, 0x0028, 0x0010, 'US', height)
-    wtagu16(f, 0x0028, 0x0011, 'US', width)
-    wtagu16(f, 0x0028, 0x0100, 'US', bitsAlloc)
-    wtagu16(f, 0x0028, 0x0101, 'US', bitsAlloc)
-    wu16(f, 0x7FE0); wu16(f, 0x0010)
-    f.write(b'OW'); wu16(f, 0); wu32(f, pixel_size)
-    for y in range(height):
-        for x in range(width):
-            wu16(f, (x * 137 + y * 53) & 0xFFFF)
-" "$TMPDIR_TEST/t25_input.dcm"
+fixture dicom "$TMPDIR_TEST/t25_input.dcm"
 
 mkdir -p "$TMPDIR_TEST/t25/input"
 cp "$TMPDIR_TEST/t25_input.dcm" "$TMPDIR_TEST/t25/input/scan.dcm"

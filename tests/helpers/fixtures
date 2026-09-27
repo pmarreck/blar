@@ -1,0 +1,24 @@
+#!/usr/bin/env luajit
+package.path = arg[0]:match('^(.*)/') .. '/?.lua;' .. package.path
+local binary = require('fixture_binary')
+local formats = require('fixture_formats')
+local command, path = arg[1], arg[2]
+local function main()
+	if command == 'pixels-identical' then
+		local png = require('png_pixels')
+		return png.parse(binary.read(path)) == png.parse(binary.read(assert(arg[3])))
+	end
+	local data
+	if command == 'zip' then
+		local entries = {}; for i = 3, #arg do entries[#entries+1] = arg[i] end
+		data = formats.zip(entries)
+	elseif command == 'png' then data = formats.png(arg[3],arg[4],arg[5])
+	elseif command == 'pdf' then data = require('fixture_pdf')(arg[3],arg[4])
+	elseif command == 'repeat' then data = string.rep(assert(arg[3]),assert(tonumber(arg[4])))
+	else data = assert(formats[command], 'unknown fixture type')(arg[3],arg[4],arg[5]) end
+	if path == '-' then assert(io.stdout:write(data)) else binary.write(assert(path),data) end
+	return true
+end
+local ok, result = pcall(main)
+if not ok then io.stderr:write('Fixture error: '..tostring(result)..'\n') end
+os.exit(ok and result and 0 or 1)

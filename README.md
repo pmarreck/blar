@@ -20,11 +20,10 @@ nix develop -c ./build debug  # build (Debug)
 ./bm             # run benchmarks
 ```
 
-The legacy shell tests still use Python to generate fixtures. Until those
-generators are replaced, provide it temporarily with
-`nix shell --inputs-from . nixpkgs#python3 -c ./test`. The test runner enters
-the project Nix environment itself and reports missing fixture dependencies
-before running tests.
+The test runner enters the project Nix environment itself. Fixtures use
+LuaJIT and zlib; ZIP and PNG fixtures are checked independently with `unzip`
+and `pngcheck`, and JSON output is checked with `jq`. The test, benchmark,
+and audit scripts have no Python dependency.
 
 The central goal is to unpack files' internal compression, encode the contents
 more efficiently in an archive, and reconstruct the original format on

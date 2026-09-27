@@ -5,12 +5,13 @@ if [[ -z ${IN_NIX_SHELL:-} ]]; then
     exec nix develop -c bash "$0" "$@"
 fi
 
-# Legacy fixture generators still need Python; fail before missing fixtures
-# can turn empty-output comparisons into apparent passes.
-if ! command -v python3 >/dev/null 2>&1; then
-    printf '%s\n' 'Legacy test fixtures require Python. Run: nix shell --inputs-from . nixpkgs#python3 -c ./test' >&2
-    exit 1
-fi
+# Fail before missing tools can turn empty-output comparisons into passes.
+for dependency in luajit jq unzip pngcheck; do
+    if ! command -v "$dependency" >/dev/null 2>&1; then
+        printf 'Missing test dependency: %s (run ./test through Nix)\n' "$dependency" >&2
+        exit 1
+    fi
+done
 
 # =============================================================================
 # BLIP Master Test Runner
@@ -66,6 +67,9 @@ if (( build_rc != 0 )); then
 fi
 
 run_suite "Packaged CLI" "bash tests/cli/package_test"
+run_suite "Fixture format checks" "luajit tests/unit/fixtures_test.lua"
+run_suite "Fixture CLI checks" "bash tests/cli/fixtures_test"
+run_suite "Audit report checks" "luajit tests/unit/audit_report_test.lua"
 
 # Zig unit tests
 run_suite "Zig Unit Tests" "nix develop -c zig build test --summary all 2>&1"

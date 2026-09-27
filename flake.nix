@@ -51,10 +51,16 @@
             hyperfine
             libjxl
             zlib
+            luajit
+            jq
+            unzip
+            coreutils
+            pngcheck
           ];
           shellHook = ''
             export JXL_INCLUDE_PATH="${pkgs.libjxl.dev}/include"
             export JXL_LIB_PATH="${pkgs.libjxl}/lib"
+            export BLAR_TEST_ZLIB="${pkgs.zlib}/lib/libz${pkgs.stdenv.hostPlatform.extensions.sharedLibrary}"
           '';
         };
 
@@ -92,6 +98,19 @@
             bash tests/cli/package_test "$out"
           '';
         };
+
+        checks.fixtures = pkgs.runCommand "blar-fixture-tests" {
+          nativeBuildInputs = [ pkgs.luajit pkgs.unzip pkgs.pngcheck ];
+          BLAR_TEST_ZLIB = "${pkgs.zlib}/lib/libz${pkgs.stdenv.hostPlatform.extensions.sharedLibrary}";
+        } ''
+          cp -r ${./tests} tests
+          chmod -R u+w tests
+          patchShebangs tests/helpers/fixtures tests/helpers/audit-report
+          luajit tests/unit/fixtures_test.lua
+          luajit tests/unit/audit_report_test.lua
+          bash tests/cli/fixtures_test
+          touch $out
+        '';
 
         checks.default = pkgs.stdenv.mkDerivation {
           pname = "${pname}-tests";

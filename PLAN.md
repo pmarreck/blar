@@ -9,6 +9,10 @@ Current work is ordered below. The original split checklist is preserved in docs
 - [x] Verify the optimized package, all 584 master-suite checks, and the sandboxed Nix test target (done 2026-09-27 14:42 EDT).
 - [x] Push reconciled yolo, verify remote equality and clean status, and confirm Mechatron admits eef68d5 (done 2026-09-27 14:44 EDT).
 
+## Fixture generator port
+
+- [x] Port fixtures and optional audit/benchmark helpers to LuaJIT; pass all 681 master-suite checks without Python and all 97 sandboxed helper checks (done 2026-09-27 15:07 EDT).
+
 ## Follow-up work
 
 - [ ] Measure and document per-format byte identity, including PNG/ZIP/PDF deflate reconstruction; disclose content-only preservation (context: INTENT.md).
@@ -18,5 +22,3 @@ Current work is ordered below. The original split checklist is preserved in docs
 - [ ] Add cancellation to GUI archive operations with resource and partial-output cleanup (context: docs/plan_context/2026-05-04-split-plan.md).
 
 - [ ] Warn before recompressing formats whose original DEFLATE bytes cannot be guaranteed; distinguish content preservation from forensic byte identity.
-
-- [ ] Replace legacy Python fixture generators with project-preferred tooling.

@@ -1,6 +1,17 @@
 # Dirtree: Stateful directory trees in the CLI for humans and LLMs. https://github.com/pmarreck/dirtree
 ver=1.2
 annotate=[
+	tests/helpers/fixtures = LuaJIT command for deterministic archive fixtures and PNG comparisons
+	tests/helpers/fixture_binary.lua = Test-only binary packing, zlib FFI, checksums, and file I/O
+	tests/helpers/fixture_formats.lua = ZIP, PNG, image, audio, and medical-image fixture generators
+	tests/helpers/fixture_jpeg.lua = Preserved JPEG bytes used by PDF fixture generators
+	tests/helpers/fixture_pdf.lua = Minimal JPEG, FlateDecode, text-only, and encryption-marker PDFs
+	tests/helpers/png_pixels.lua = Independent PNG chunk validation and scanline filter decoding
+	tests/helpers/audit-report = LuaJIT CSV-to-Markdown audit report command
+	tests/helpers/audit_report.lua = CSV parsing and per-format byte-identity audit aggregation
+	tests/unit/fixtures_test.lua = Binary fixture layout, PNG filter, and PDF cross-reference assertions
+	tests/unit/audit_report_test.lua = Audit CSV quoting, summaries, medians, and failure-report assertions
+	tests/cli/fixtures_test = Fixture CLI checks with independent unzip and pngcheck oracles
 	assets/app-icon.png = Application icon source image
 	assets/blar-app-icon.png = Blarchiver application icon source image
 	assets/blar-doc-icon.png = BLAR document icon source image

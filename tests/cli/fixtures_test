@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -u
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+FIXTURE="$ROOT/tests/helpers/fixtures"
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+PASS=0
+FAIL=0
+check() {
+	local name=$1
+	shift
+	local output
+	output=$("$@" 2>&1)
+	if [[ $? == 0 ]]; then
+		PASS=$((PASS + 1))
+	else
+		FAIL=$((FAIL + 1))
+		printf 'FAIL: %s\n%s\n' "$name" "$output"
+	fi
+}
+check 'ZIP fixture with spaces and directories' "$FIXTURE" zip "$WORK/test file.zip" 'folder/' '' 'folder/hello space.txt' 'Hello world' 'empty' ''
+check 'ZIP CRC and decompression via independent unzip' unzip -tqq "$WORK/test file.zip"
+check 'ZIP entry names' test "$(unzip -Z1 "$WORK/test file.zip")" = $'folder/\nfolder/hello space.txt\nempty'
+check 'ZIP payload via independent unzip' test "$(unzip -p "$WORK/test file.zip" 'folder/hello space.txt')" = 'Hello world'
+check 'empty ZIP payload' test "$(unzip -p "$WORK/test file.zip" empty)" = ''
+check 'repeat stdout' test "$("$FIXTURE" repeat - abc 3)" = abcabcabc
+for kind in bmp tiff gif tga wav aiff fits nifti dicom; do
+	check "$kind fixture" "$FIXTURE" "$kind" "$WORK/$kind"
+	check "$kind repeated generation" "$FIXTURE" "$kind" "$WORK/$kind.copy"
+	check "$kind deterministic bytes" cmp "$WORK/$kind" "$WORK/$kind.copy"
+done
+check 'PNG filename with quote' "$FIXTURE" png "$WORK/image ' one.png" rgba 8 8
+check 'identical pixels' "$FIXTURE" pixels-identical "$WORK/image ' one.png" "$WORK/image ' one.png"
+check 'different PNG shape' "$FIXTURE" png "$WORK/different.png" rgba 4 16
+"$FIXTURE" pixels-identical "$WORK/image ' one.png" "$WORK/different.png" >"$WORK/compare.log" 2>&1
+check 'different shape rejected' test "$?" = 1
+"$FIXTURE" unknown "$WORK/no-file" >"$WORK/unknown.log" 2>&1
+check 'unknown fixture rejected' test "$?" = 1
+check 'unknown fixture creates no file' test ! -e "$WORK/no-file"
+for kind in rgba rgb gray text; do
+	check "$kind PNG fixture" "$FIXTURE" png "$WORK/$kind.png" "$kind"
+	check "$kind PNG via independent pngcheck" pngcheck -q "$WORK/$kind.png"
+done
+for kind in jpeg text flate encrypted; do
+	check "$kind PDF fixture" "$FIXTURE" pdf "$WORK/$kind.pdf" "$kind"
+done
+printf 'Results: %s passed, %s failed\n' "$PASS" "$FAIL"
+exit "$FAIL"

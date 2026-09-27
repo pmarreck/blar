@@ -84,23 +84,7 @@ echo "--- Test 2: Streaming with container expansion ---"
 
 mkdir -p "$TMPDIR_TEST/t2/input"
 # Create a BMP (will be expanded to JXL)
-python3 -c "
-import struct, sys
-width, height = 32, 32
-row_stride = (width * 3 + 3) & ~3
-pixel_data_len = row_stride * height
-file_size = 54 + pixel_data_len
-header = struct.pack('<2sIHHI', b'BM', file_size, 0, 0, 54)
-dib = struct.pack('<IiiHHIIiiII', 40, width, height, 1, 24, 0, pixel_data_len, 2835, 2835, 0, 0)
-with open(sys.argv[1], 'wb') as f:
-    f.write(header + dib)
-    for y in range(height):
-        row = b''
-        for x in range(width):
-            row += struct.pack('BBB', (x*4)&0xFF, (y*4)&0xFF, ((x+y)*2)&0xFF)
-        while len(row) % 4 != 0: row += b'\x00'
-        f.write(row)
-" "$TMPDIR_TEST/t2/input/image.bmp"
+"$SCRIPT_DIR/helpers/fixtures" bmp "$TMPDIR_TEST/t2/input/image.bmp" 32 gradient || exit 1
 echo "Plain text file" > "$TMPDIR_TEST/t2/input/readme.txt"
 
 # In-memory with expansion

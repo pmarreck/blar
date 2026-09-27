@@ -316,7 +316,7 @@ echo "── Info --json tests ──"
 
 # blar info --json valid JSON
 BJ_OUT=$("$BLAR" info --json "$TMPDIR_TEST/lzma2_comp.blar" 2>/dev/null)
-echo "$BJ_OUT" | python3 -m json.tool >/dev/null 2>&1 \
+echo "$BJ_OUT" | jq -e -s 'length == 1' >/dev/null 2>&1 \
   && pass "blar info --json valid JSON" \
   || fail "blar info --json valid JSON"
 

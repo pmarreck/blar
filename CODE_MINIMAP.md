@@ -74,6 +74,10 @@ input; see the corpus audit and the open guarantees in INTENT.md.
 |---|---|
 | `tests/blar_test.sh`, `tests/blar_full_test.sh` | CLI archive and metadata integration tests. |
 | `tests/cli/package_test` | Runs the installed CLI to catch missing ELF loaders or runtime libraries. |
+| `tests/helpers/fixtures`, `tests/helpers/fixture_*.lua` | Deterministic LuaJIT fixtures for archive integration tests and benchmarks. |
+| `tests/helpers/png_pixels.lua` | Independent PNG decoding and pixel comparison for roundtrip assertions. |
+| `tests/helpers/audit-report`, `tests/helpers/audit_report.lua` | LuaJIT CSV parsing and reconstruction-audit Markdown reports. |
+| `tests/unit/`, `tests/cli/fixtures_test` | Fixture layout, PNG filters, audit reporting, and external unzip/pngcheck validation. |
 | `tests/container_expansion_test.sh`, `tests/container_expansion_dual_test.sh` | File expansion and reconstruction checks. |
 | `tests/pdf_container_test.sh`, `tests/png_container_test.sh` | PDF/PNG-specific integration tests. |
 | `tests/compression_test.sh`, `tests/encryption_test.sh` | Compression and encryption CLI behavior. |
